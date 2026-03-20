@@ -1,7 +1,9 @@
 #ifndef __LEXBORPP_HPP__
 #define __LEXBORPP_HPP__
 
+#include <iterator>
 #include <optional>
+#include <ranges>
 #include <string>
 #include <string_view>
 
@@ -239,7 +241,7 @@ auto inline to_string(lxb_dom_attr_t* attr) noexcept {
   return std::string_view{reinterpret_cast<const char*>(attr_val_data), attr_val_len};
 }
 
-class node_walker {
+class node_walker : public std::ranges::view_interface<node_walker> {
 public:
   using value_type = lxb_dom_node_t*;
 
@@ -247,7 +249,8 @@ public:
 
   class iterator {
   public:
-    using iterator_category = std::input_iterator_tag;
+    using iterator_concept = std::forward_iterator_tag;
+    using iterator_category = std::forward_iterator_tag;
     using value_type = lxb_dom_node_t*;
     using difference_type = std::ptrdiff_t;
     using pointer = lxb_dom_node_t**;
@@ -291,13 +294,15 @@ public:
 
 
   [[nodiscard]] iterator begin() noexcept { return iterator{start, start ? start->first_child : nullptr}; }
+  [[nodiscard]] iterator begin() const noexcept { return iterator{start, start ? start->first_child : nullptr}; }
   [[nodiscard]] iterator end() noexcept { return iterator{start, start}; }
+  [[nodiscard]] iterator end() const noexcept { return iterator{start, start}; }
 
 private:
   lxb_dom_node_t* start;
 };
 
-class node_sibling_walker {
+class node_sibling_walker : public std::ranges::view_interface<node_sibling_walker> {
 public:
   using value_type = lxb_dom_node_t*;
 
@@ -305,7 +310,8 @@ public:
 
   class iterator {
   public:
-    using iterator_category = std::input_iterator_tag;
+    using iterator_concept = std::forward_iterator_tag;
+    using iterator_category = std::forward_iterator_tag;
     using value_type = lxb_dom_node_t*;
     using difference_type = std::ptrdiff_t;
     using pointer = lxb_dom_node_t**;
@@ -339,13 +345,15 @@ public:
 
 
   [[nodiscard]] iterator begin() noexcept { return iterator{start}; }
+  [[nodiscard]] iterator begin() const noexcept { return iterator{start}; }
   [[nodiscard]] iterator end() noexcept { return iterator{nullptr}; }
+  [[nodiscard]] iterator end() const noexcept { return iterator{nullptr}; }
 
 private:
   lxb_dom_node_t* start;
 };
 
-class attr_walker {
+class attr_walker : public std::ranges::view_interface<attr_walker> {
 public:
   using value_type = lxb_dom_attr_t*;
 
@@ -358,7 +366,8 @@ public:
 
   class iterator {
   public:
-    using iterator_category = std::input_iterator_tag;
+    using iterator_concept = std::forward_iterator_tag;
+    using iterator_category = std::forward_iterator_tag;
     using value_type = lxb_dom_attr_t*;
     using difference_type = std::ptrdiff_t;
     using pointer = lxb_dom_attr_t**;
@@ -392,11 +401,35 @@ public:
 
 
   [[nodiscard]] iterator begin() noexcept { return iterator{start}; }
+  [[nodiscard]] iterator begin() const noexcept { return iterator{start}; }
   [[nodiscard]] iterator end() noexcept { return iterator{nullptr}; }
+  [[nodiscard]] iterator end() const noexcept { return iterator{nullptr}; }
 
 private:
   lxb_dom_attr_t* start;
 };
+
+namespace std::ranges {
+
+template <>
+inline constexpr bool enable_view<::node_walker> = true;
+
+template <>
+inline constexpr bool enable_borrowed_range<::node_walker> = true;
+
+template <>
+inline constexpr bool enable_view<::node_sibling_walker> = true;
+
+template <>
+inline constexpr bool enable_borrowed_range<::node_sibling_walker> = true;
+
+template <>
+inline constexpr bool enable_view<::attr_walker> = true;
+
+template <>
+inline constexpr bool enable_borrowed_range<::attr_walker> = true;
+
+}  // namespace std::ranges
 
 auto inline tag_name(lxb_tag_id_t const tag_id) {
   using namespace std::string_view_literals;
