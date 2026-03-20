@@ -43,14 +43,25 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-find_package(lexbor CONFIG REQUIRED)
+find_package(lexbor CONFIG QUIET)
+
+if(NOT TARGET lexbor::lexbor)
+    find_path(LEXBOR_INCLUDE_DIR NAMES lexbor/html/parser.h REQUIRED)
+    find_library(LEXBOR_LIBRARY NAMES lexbor_static lexbor REQUIRED)
+
+    add_library(lexbor::lexbor UNKNOWN IMPORTED)
+    set_target_properties(lexbor::lexbor PROPERTIES
+        IMPORTED_LOCATION "${LEXBOR_LIBRARY}"
+        INTERFACE_INCLUDE_DIRECTORIES "${LEXBOR_INCLUDE_DIR}"
+    )
+endif()
 
 add_library(lexborpp INTERFACE)
 add_library(lexborpp::lexborpp ALIAS lexborpp)
 
 target_include_directories(lexborpp
     INTERFACE
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
 target_link_libraries(lexborpp INTERFACE lexbor::lexbor)
@@ -59,7 +70,7 @@ target_compile_features(lexborpp INTERFACE ${STD_CPP})
 set(LEXBORPP_INSTALL_CMAKEDIR "${CMAKE_INSTALL_LIBDIR}/cmake/lexborpp")
 
 install(TARGETS lexborpp EXPORT lexborppTargets)
-install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/lexborpp.hpp"
+install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/include/lexborpp.hpp"
         DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
 install(EXPORT lexborppTargets
