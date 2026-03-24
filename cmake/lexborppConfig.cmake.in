@@ -2,7 +2,7 @@
 
 include(CMakeFindDependencyMacro)
 
-find_package(lexbor CONFIG QUIET)
+find_dependency(lexbor CONFIG QUIET)
 
 if(NOT TARGET lexbor::lexbor)
     find_path(LEXBOR_INCLUDE_DIR NAMES lexbor/html/parser.h REQUIRED)
