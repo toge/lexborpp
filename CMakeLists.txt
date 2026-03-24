@@ -64,7 +64,7 @@ target_include_directories(lexborpp
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
-target_link_libraries(lexborpp PUBLIC lexbor::lexbor)
+target_link_libraries(lexborpp INTERFACE lexbor::lexbor)
 target_compile_features(lexborpp INTERFACE ${STD_CPP})
 
 set(LEXBORPP_INSTALL_CMAKEDIR "${CMAKE_INSTALL_LIBDIR}/cmake/lexborpp")
