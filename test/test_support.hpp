@@ -41,7 +41,7 @@ public:
   }
 
   [[nodiscard]] auto by_id(std::string_view id) const noexcept -> lxb_dom_node_t* {
-    return get_element_by_id(document_node(), id);
+    return lexborpp::get_element_by_id(document_node(), id);
   }
 
 private:

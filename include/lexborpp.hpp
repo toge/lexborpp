@@ -10,6 +10,8 @@
 #include "lexbor/html/parser.h"
 #include "lexbor/dom/dom.h"
 
+namespace lexborpp {
+
 auto inline is_non_element_node(lxb_dom_node_t* node) noexcept -> bool {
   if (node == nullptr) {
     return true;
@@ -409,28 +411,6 @@ private:
   lxb_dom_attr_t* start;
 };
 
-namespace std::ranges {
-
-template <>
-inline constexpr bool enable_view<::node_walker> = true;
-
-template <>
-inline constexpr bool enable_borrowed_range<::node_walker> = true;
-
-template <>
-inline constexpr bool enable_view<::node_sibling_walker> = true;
-
-template <>
-inline constexpr bool enable_borrowed_range<::node_sibling_walker> = true;
-
-template <>
-inline constexpr bool enable_view<::attr_walker> = true;
-
-template <>
-inline constexpr bool enable_borrowed_range<::attr_walker> = true;
-
-}  // namespace std::ranges
-
 auto inline tag_name(lxb_tag_id_t const tag_id) {
   using namespace std::string_view_literals;
   switch(tag_id) {
@@ -633,5 +613,31 @@ auto inline tag_name(lxb_tag_id_t const tag_id) {
   default: return ""sv;
   }
 }
+
+} // namespace lexborpp
+
+namespace std::ranges {
+
+template <>
+inline constexpr bool enable_view<lexborpp::node_walker> = true;
+
+template <>
+inline constexpr bool enable_borrowed_range<lexborpp::node_walker> = true;
+
+template <>
+inline constexpr bool enable_view<lexborpp::node_sibling_walker> = true;
+
+template <>
+inline constexpr bool enable_borrowed_range<lexborpp::node_sibling_walker> = true;
+
+template <>
+inline constexpr bool enable_view<lexborpp::attr_walker> = true;
+
+template <>
+inline constexpr bool enable_borrowed_range<lexborpp::attr_walker> = true;
+
+}  // namespace std::ranges
+
+
 
 #endif /* __LEXBORPP_HPP__ */
