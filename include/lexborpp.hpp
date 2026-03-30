@@ -1,6 +1,7 @@
 #ifndef __LEXBORPP_HPP__
 #define __LEXBORPP_HPP__
 
+#include <initializer_list>
 #include <iterator>
 #include <optional>
 #include <ranges>
@@ -148,6 +149,25 @@ auto inline has_class(lxb_dom_node_t* node, std::string_view class_name) noexcep
     sv.remove_prefix(end);
   }
   return false;
+}
+
+/**
+ * @brief ノードのclass属性に指定した複数のクラス名がすべて含まれているかを判定する
+ *
+ * @param node 判定対象のノード
+ * @param class_names 判定するクラス名のリスト
+ * @return bool class属性にclass_namesの全てが含まれている場合true、それ以外false
+ */
+auto inline has_class(lxb_dom_node_t* node, std::initializer_list<std::string_view> class_names) noexcept -> bool {
+  if (class_names.size() == 0) {
+    return false;
+  }
+  for (auto const& name : class_names) {
+    if (not has_class(node, name)) {
+      return false;
+    }
+  }
+  return true;
 }
 
 /**

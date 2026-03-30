@@ -134,6 +134,13 @@ TEST_CASE("lexborpp lookup helpers find expected nodes") {
   REQUIRE_FALSE(lexborpp::has_class(class_target, ""));
   REQUIRE_FALSE(lexborpp::has_class(container, "missing"));
   REQUIRE_FALSE(lexborpp::has_class(text_node, "match"));
+
+  REQUIRE(lexborpp::has_class(class_target, {"match", "target-class"}));
+  REQUIRE(lexborpp::has_class(class_target, {"target-class", "match"}));
+  REQUIRE_FALSE(lexborpp::has_class(class_target, {"match", "other"}));
+  REQUIRE_FALSE(lexborpp::has_class(class_second, {"match", "target-class"}));
+  REQUIRE_FALSE(lexborpp::has_class(nullptr, {"match"}));
+  REQUIRE_FALSE(lexborpp::has_class(class_target, {}));
 }
 
 TEST_CASE("lexborpp attribute and text helpers return direct content") {
