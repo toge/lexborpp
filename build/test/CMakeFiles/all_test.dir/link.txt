@@ -1,1 +1,0 @@
-/usr/bin/c++  -Wall -Wextra -pedantic -g3 -O3 -march=native -O3 -DNDEBUG -Wl,--dependency-file=CMakeFiles/all_test.dir/link.d CMakeFiles/all_test.dir/test_lexborpp.cpp.o -o all_test  -Wl,-rpath,/usr/local/lib /usr/lib/libCatch2Main.a /usr/lib/libCatch2.a /usr/local/lib/liblexbor.so.2.8.0 -lm
