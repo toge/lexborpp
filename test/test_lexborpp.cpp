@@ -124,6 +124,23 @@ TEST_CASE("lexborpp lookup helpers find expected nodes") {
   REQUIRE(lexborpp::get_first_element_by_class(document, "match") == class_second);
   REQUIRE(lexborpp::get_first_element_by_class(document, "target-class") == nullptr);
   REQUIRE(lexborpp::get_first_element_by_class(nullptr, "match") == nullptr);
+
+  REQUIRE(lexborpp::has_class(class_target, "match"));
+  REQUIRE(lexborpp::has_class(class_target, "target-class"));
+  REQUIRE_FALSE(lexborpp::has_class(class_target, "other"));
+  REQUIRE(lexborpp::has_class(class_second, "match"));
+  REQUIRE_FALSE(lexborpp::has_class(class_second, "target-class"));
+  REQUIRE_FALSE(lexborpp::has_class(nullptr, "match"));
+  REQUIRE_FALSE(lexborpp::has_class(class_target, ""));
+  REQUIRE_FALSE(lexborpp::has_class(container, "missing"));
+  REQUIRE_FALSE(lexborpp::has_class(text_node, "match"));
+
+  REQUIRE(lexborpp::has_class(class_target, {"match", "target-class"}));
+  REQUIRE(lexborpp::has_class(class_target, {"target-class", "match"}));
+  REQUIRE_FALSE(lexborpp::has_class(class_target, {"match", "other"}));
+  REQUIRE_FALSE(lexborpp::has_class(class_second, {"match", "target-class"}));
+  REQUIRE_FALSE(lexborpp::has_class(nullptr, {"match"}));
+  REQUIRE_FALSE(lexborpp::has_class(class_target, {}));
 }
 
 TEST_CASE("lexborpp attribute and text helpers return direct content") {
