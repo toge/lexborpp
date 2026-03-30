@@ -1,0 +1,8 @@
+[
+{
+  "directory": "/home/runner/work/lexborpp/lexborpp/build/test",
+  "command": "/usr/bin/c++  -I/home/runner/work/lexborpp/lexborpp/test -I/home/runner/work/lexborpp/lexborpp/include  -Wall -Wextra -pedantic -g3 -O3 -march=native -O3 -DNDEBUG -std=c++23 -o CMakeFiles/all_test.dir/test_lexborpp.cpp.o -c /home/runner/work/lexborpp/lexborpp/test/test_lexborpp.cpp",
+  "file": "/home/runner/work/lexborpp/lexborpp/test/test_lexborpp.cpp",
+  "output": "test/CMakeFiles/all_test.dir/test_lexborpp.cpp.o"
+}
+]

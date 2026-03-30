@@ -1,0 +1,36 @@
+Start testing: Mar 30 11:48 UTC
+----------------------------------------------------------
+1/1 Testing: all_test
+1/1 Test: all_test
+Command: "/home/runner/work/lexborpp/lexborpp/build/test/all_test" "-r" "junit"
+Directory: /home/runner/work/lexborpp/lexborpp/build/test
+"all_test" start time: Mar 30 11:48 UTC
+Output:
+----------------------------------------------------------
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites>
+  <testsuite name="all_test" errors="0" failures="0" skipped="0" tests="91" hostname="tbd" time="0.000" timestamp="2026-03-30T11:48:17Z">
+    <properties>
+      <property name="random-seed" value="840436528"/>
+    </properties>
+    <testcase classname="all_test.global" name="lexborpp lookup helpers find expected nodes" time="0.000" status="run"/>
+    <testcase classname="all_test.global" name="lexborpp attribute and text helpers return direct content" time="0.000" status="run"/>
+    <testcase classname="all_test.global" name="lexborpp predicate helpers traverse in expected order" time="0.000" status="run"/>
+    <testcase classname="all_test.global" name="lexborpp string helpers expose node and attribute text" time="0.000" status="run"/>
+    <testcase classname="all_test.global" name="node_walker traverses descendants depth first" time="0.000" status="run"/>
+    <testcase classname="all_test.global" name="sibling and attribute walkers preserve parser order" time="0.000" status="run"/>
+    <testcase classname="all_test.global" name="tag_name returns representative tag names" time="0.000" status="run"/>
+    <testcase classname="all_test.global" name="walkers compose with std ranges adaptors" time="0.000" status="run"/>
+    <system-out/>
+    <system-err/>
+  </testsuite>
+</testsuites>
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"all_test" end time: Mar 30 11:48 UTC
+"all_test" time elapsed: 00:00:00
+----------------------------------------------------------
+
+End testing: Mar 30 11:48 UTC
