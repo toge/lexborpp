@@ -94,6 +94,8 @@ target_link_libraries(your_target
 #include "lexborpp.hpp"
 
 int main() {
+  using namespace lexborpp;
+
   char constexpr html[] = R"HTML(
 <!doctype html>
 <html>

@@ -1,5 +1,5 @@
-#ifndef __LEXBORPP_HPP__
-#define __LEXBORPP_HPP__
+#ifndef LEXBORPP_HPP_
+#define LEXBORPP_HPP_
 
 #include <expected>
 #include <functional>
@@ -253,6 +253,14 @@ private:
 
 // --- Core API ---
 
+/**
+ * @brief ノードが指定されたクラスを持っているか確認する。
+ *
+ * @param node 確認対象のノード
+ * @param class_name クラス名
+ * @return bool 指定されたクラスを持っている場合はtrue、そうでない場合はfalse
+ * @note class属性が空白区切りのリストであることに対応している。
+ */
 [[nodiscard]] constexpr auto inline has_class(lxb_dom_node_t const* node, std::string_view class_name) noexcept -> bool {
   if (node == nullptr or class_name.empty() or is_non_element_node(const_cast<lxb_dom_node_t*>(node))) {
     return false;
@@ -280,14 +288,43 @@ private:
   return false;
 }
 
-auto constexpr inline get_first_element_by_class(lxb_dom_node_t* node, std::string_view class_name) noexcept -> lxb_dom_node_t* {
+/**
+ * @brief ノードが指定されたすべてのクラスを持っているか確認する。
+ *
+ * @param node 確認対象のノード
+ * @param class_names クラス名のリスト
+ * @return bool すべてのクラスを持っている場合はtrue、そうでない場合はfalse
+ */
+[[nodiscard]] constexpr auto inline has_class(lxb_dom_node_t const* node, std::initializer_list<std::string_view> class_names) noexcept -> bool {
+  for (auto const& name : class_names) {
+    if (not has_class(node, name)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * @brief class属性が指定された文字列と完全一致する最初の要素を取得する。
+ *
+ * @param node 検索を開始するノード
+ * @param class_name 検索するクラス属性文字列（完全一致）
+ * @return lxb_dom_node_t* 最初に見つかった要素、見つからない場合は nullptr
+ */
+auto inline get_first_element_by_class(lxb_dom_node_t* node, std::string_view class_name) noexcept -> lxb_dom_node_t* {
   if (node == nullptr or class_name.empty()) {
     return nullptr;
   }
 
   auto const text_walker = +[](lxb_dom_node_t* node, void* ctx) noexcept {
+    if (is_non_element_node(node)) {
+      return LEXBOR_ACTION_OK;
+    }
+
     auto& [target, result] = *reinterpret_cast<std::pair<std::string_view, lxb_dom_node*>*>(ctx);
-    if (has_class(node, target)) {
+    auto attr_len = size_t{};
+    auto const attr = lxb_dom_element_get_attribute(lxb_dom_interface_element(node), reinterpret_cast<const lxb_char_t*>("class"), 5, &attr_len);
+    if (attr != nullptr and target == std::string_view{reinterpret_cast<const char*>(attr), attr_len}) {
       result = node;
       return LEXBOR_ACTION_STOP;
     }
@@ -299,6 +336,14 @@ auto constexpr inline get_first_element_by_class(lxb_dom_node_t* node, std::stri
   return target.second;
 }
 
+/**
+ * @brief 指定されたクラスを持つすべての要素を取得する。
+ *
+ * @param node 検索対象のノード
+ * @param class_name 検索するクラス名
+ * @return std::vector<lxb_dom_node_t*> マッチした全要素のリスト
+ * @note has_class 関数を使用して、空白区切りのリストからマッチングを行う。
+ */
 [[nodiscard]] auto inline get_elements_by_class(lxb_dom_node_t* node, std::string_view class_name) -> std::vector<lxb_dom_node_t*> {
   auto result = std::vector<lxb_dom_node_t*>{};
   if (node == nullptr or class_name.empty()) {
@@ -860,7 +905,6 @@ inline auto serialize_callback(const lxb_char_t* data, size_t len, void* ctx) no
     return LXB_STATUS_STOP;
   };
 
-
   lxb_selectors_find(selectors.get(), node, list.get(), cb, &result);
   return result;
 }
@@ -895,9 +939,6 @@ inline auto serialize_callback(const lxb_char_t* data, size_t len, void* ctx) no
 
 namespace std::ranges {
 
-// enable_view specializations are not needed when inheriting from view_interface,
-// but they must NOT conflict if provided. It's safer to let view_interface handle it.
-
 template <>
 inline constexpr bool enable_borrowed_range<lexborpp::node_walker> = true;
 
@@ -912,4 +953,4 @@ inline constexpr bool enable_borrowed_range<lexborpp::attr_walker> = true;
 
 }  // namespace std::ranges
 
-#endif /* __LEXBORPP_HPP__ */
+#endif  // LEXBORPP_HPP_

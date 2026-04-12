@@ -257,6 +257,8 @@ TEST_CASE("lexborpp lookup helpers find expected nodes") {
   // has_class tests
   REQUIRE(lexborpp::has_class(class_target, "match"));
   REQUIRE(lexborpp::has_class(class_target, "target-class"));
+  REQUIRE(lexborpp::has_class(class_target, {"match", "target-class"}));
+  REQUIRE_FALSE(lexborpp::has_class(class_target, {"match", "missing"}));
   REQUIRE_FALSE(lexborpp::has_class(class_target, "mat"));         // partial match
   REQUIRE_FALSE(lexborpp::has_class(class_target, "target-clas")); // partial match
   REQUIRE_FALSE(lexborpp::has_class(class_target, ""));            // empty class
@@ -268,13 +270,13 @@ TEST_CASE("lexborpp lookup helpers find expected nodes") {
   REQUIRE(lexborpp::has_class(attrs_node, "alpha"));
   REQUIRE(lexborpp::has_class(attrs_node, "beta"));
 
-  // get_first_element_by_class tests
-  REQUIRE(lexborpp::get_first_element_by_class(document, "match") == class_target);
-  REQUIRE(lexborpp::get_first_element_by_class(document, "target-class") == class_target);
-  REQUIRE(lexborpp::get_first_element_by_class(document, "match target-class") == nullptr); // must be single token
+  // get_first_element_by_class tests (EXACT MATCH)
+  REQUIRE(lexborpp::get_first_element_by_class(document, "match") == class_second);
+  REQUIRE(lexborpp::get_first_element_by_class(document, "target-class") == nullptr);
+  REQUIRE(lexborpp::get_first_element_by_class(document, "match target-class") == class_target);
   REQUIRE(lexborpp::get_first_element_by_class(nullptr, "match") == nullptr);
 
-  // get_elements_by_class tests
+  // get_elements_by_class tests (TOKEN MATCH)
   auto const matches = lexborpp::get_elements_by_class(document, "match");
   REQUIRE(matches.size() == 2);
   REQUIRE(matches[0] == class_target);
@@ -284,6 +286,12 @@ TEST_CASE("lexborpp lookup helpers find expected nodes") {
   REQUIRE(alpha_matches.size() == 2);
   REQUIRE(alpha_matches[0] == container);
   REQUIRE(alpha_matches[1] == attrs_node);
+
+  auto const missing_matches = lexborpp::get_elements_by_class(document, "non-existent");
+  REQUIRE(missing_matches.empty());
+
+  auto const null_matches = lexborpp::get_elements_by_class(nullptr, "match");
+  REQUIRE(null_matches.empty());
 }
 
 TEST_CASE("lexborpp attribute and text helpers return direct content") {
