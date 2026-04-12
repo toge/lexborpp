@@ -1,19 +1,28 @@
 #ifndef __LEXBORPP_HPP__
 #define __LEXBORPP_HPP__
 
+#include <expected>
+#include <functional>
 #include <initializer_list>
 #include <iterator>
+#include <memory>
 #include <optional>
 #include <ranges>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "lexbor/html/parser.h"
+#include "lexbor/html/serialize.h"
 #include "lexbor/dom/dom.h"
+#include "lexbor/css/css.h"
+#include "lexbor/selectors/selectors.h"
 
 namespace lexborpp {
 
-auto inline is_non_element_node(lxb_dom_node_t* node) noexcept -> bool {
+// --- Forward Declarations & Helpers ---
+
+auto constexpr inline is_non_element_node(lxb_dom_node_t* node) noexcept -> bool {
   if (node == nullptr) {
     return true;
   }
@@ -23,12 +32,393 @@ auto inline is_non_element_node(lxb_dom_node_t* node) noexcept -> bool {
 }
 
 /**
- * @brief 指定したIDのelementを取得する。
- *
- * @param node これ以下のノードを検索対象とする
- * @param id_name 検索対象のid名
- * @return auto 複数IDがある場合は最初のものを、ない場合はnullptrを返す
+ * @brief ノードを要素型に変換する（キャスト）
  */
+[[nodiscard]] auto constexpr inline as_element(lxb_dom_node_t* node) noexcept -> lxb_dom_element_t* {
+  if (node == nullptr) {
+    return nullptr;
+  }
+  return lxb_dom_interface_element(node);
+}
+
+// --- Walkers ---
+
+class node_walker : public std::ranges::view_interface<node_walker> {
+public:
+  using value_type = lxb_dom_node_t*;
+
+  explicit node_walker(lxb_dom_node_t* node = nullptr) : start(node) { }
+
+  class iterator {
+  public:
+    using iterator_concept = std::forward_iterator_tag;
+    using iterator_category = std::forward_iterator_tag;
+    using value_type = lxb_dom_node_t*;
+    using difference_type = std::ptrdiff_t;
+    using pointer = lxb_dom_node_t**;
+    using reference = lxb_dom_node_t*&;
+
+    iterator(lxb_dom_node_t* node = nullptr, lxb_dom_node_t* end = nullptr) : start(node), current(end) { }
+
+    iterator& operator++() noexcept {
+      if (current == nullptr) {
+        return *this;
+      }
+
+      if (current->first_child != nullptr) {
+        current = current->first_child;
+        return *this;
+      }
+
+      while (current != nullptr && current != start && current->next == nullptr) {
+        current = current->parent;
+      }
+
+      if (current == start || current == nullptr) {
+        current = nullptr;
+      } else {
+        current = current->next;
+      }
+
+      return *this;
+    }
+
+    iterator operator++(int) noexcept {
+      auto temp = *this;
+      ++*this;
+      return temp;
+    }
+
+    auto operator==(iterator const &rhs) const noexcept { return current == rhs.current; }
+    lxb_dom_node_t* const& operator*() const noexcept { return current; }
+
+  private:
+    lxb_dom_node_t* start;
+    lxb_dom_node_t* current;
+  };
+
+  [[nodiscard]] iterator begin() noexcept { return iterator{start, start ? start->first_child : nullptr}; }
+  [[nodiscard]] iterator begin() const noexcept { return iterator{start, start ? start->first_child : nullptr}; }
+  [[nodiscard]] iterator end() noexcept { return iterator{start, nullptr}; }
+  [[nodiscard]] iterator end() const noexcept { return iterator{start, nullptr}; }
+
+private:
+  lxb_dom_node_t* start;
+};
+
+class node_sibling_walker : public std::ranges::view_interface<node_sibling_walker> {
+public:
+  using value_type = lxb_dom_node_t*;
+
+  explicit node_sibling_walker(lxb_dom_node_t* node = nullptr) : start(node) { }
+
+  class iterator {
+  public:
+    using iterator_concept = std::forward_iterator_tag;
+    using iterator_category = std::forward_iterator_tag;
+    using value_type = lxb_dom_node_t*;
+    using difference_type = std::ptrdiff_t;
+    using pointer = lxb_dom_node_t**;
+    using reference = lxb_dom_node_t*&;
+
+    iterator(lxb_dom_node_t* node = nullptr) : current(node) { }
+
+    iterator& operator++() noexcept {
+      if (current != nullptr) {
+        current = current->next;
+      }
+      return *this;
+    }
+
+    iterator operator++(int) noexcept {
+      auto temp = *this;
+      ++*this;
+      return temp;
+    }
+
+    auto operator==(iterator const &rhs) const noexcept { return current == rhs.current; }
+    lxb_dom_node_t* const& operator*() const noexcept { return current; }
+
+  private:
+    lxb_dom_node_t* current;
+  };
+
+  [[nodiscard]] iterator begin() noexcept { return iterator{start}; }
+  [[nodiscard]] iterator begin() const noexcept { return iterator{start}; }
+  [[nodiscard]] iterator end() noexcept { return iterator{nullptr}; }
+  [[nodiscard]] iterator end() const noexcept { return iterator{nullptr}; }
+
+private:
+  lxb_dom_node_t* start;
+};
+
+class node_prev_sibling_walker : public std::ranges::view_interface<node_prev_sibling_walker> {
+public:
+  using value_type = lxb_dom_node_t*;
+
+  explicit node_prev_sibling_walker(lxb_dom_node_t* node = nullptr) 
+    : start(node ? node->prev : nullptr) { }
+
+  class iterator {
+  public:
+    using iterator_concept = std::forward_iterator_tag;
+    using iterator_category = std::forward_iterator_tag;
+    using value_type = lxb_dom_node_t*;
+    using difference_type = std::ptrdiff_t;
+    using pointer = lxb_dom_node_t**;
+    using reference = lxb_dom_node_t*&;
+
+    iterator(lxb_dom_node_t* node = nullptr) : current(node) { }
+
+    iterator& operator++() noexcept {
+      if (current != nullptr) {
+        current = current->prev;
+      }
+      return *this;
+    }
+
+    iterator operator++(int) noexcept {
+      auto temp = *this;
+      ++*this;
+      return temp;
+    }
+
+    auto operator==(iterator const &rhs) const noexcept { return current == rhs.current; }
+    lxb_dom_node_t* const& operator*() const noexcept { return current; }
+
+  private:
+    lxb_dom_node_t* current;
+  };
+
+  [[nodiscard]] iterator begin() noexcept { return iterator{start}; }
+  [[nodiscard]] iterator begin() const noexcept { return iterator{start}; }
+  [[nodiscard]] iterator end() noexcept { return iterator{nullptr}; }
+  [[nodiscard]] iterator end() const noexcept { return iterator{nullptr}; }
+
+private:
+  lxb_dom_node_t* start;
+};
+
+class attr_walker : public std::ranges::view_interface<attr_walker> {
+public:
+  using value_type = lxb_dom_attr_t*;
+
+  explicit attr_walker(lxb_dom_node_t* node) : start(nullptr) {
+    if (node != nullptr and not is_non_element_node(node)) {
+      start = lxb_dom_element_first_attribute(lxb_dom_interface_element(node));
+    }
+  }
+  
+  attr_walker(lxb_dom_attr_t* attr = nullptr) : start(attr) { }
+
+  class iterator {
+  public:
+    using iterator_concept = std::forward_iterator_tag;
+    using iterator_category = std::forward_iterator_tag;
+    using value_type = lxb_dom_attr_t*;
+    using difference_type = std::ptrdiff_t;
+    using pointer = lxb_dom_attr_t**;
+    using reference = lxb_dom_attr_t*&;
+
+    iterator(lxb_dom_attr_t* node = nullptr) : current(node) { }
+
+    iterator& operator++() noexcept {
+      if (current != nullptr) {
+        current = lxb_dom_element_next_attribute(current);
+      }
+      return *this;
+    }
+
+    iterator operator++(int) noexcept {
+      auto temp = *this;
+      ++*this;
+      return temp;
+    }
+
+    auto operator==(iterator const &rhs) const noexcept { return current == rhs.current; }
+    lxb_dom_attr_t* const& operator*() const noexcept { return current; }
+
+  private:
+    lxb_dom_attr_t* current;
+  };
+
+  [[nodiscard]] iterator begin() noexcept { return iterator{start}; }
+  [[nodiscard]] iterator begin() const noexcept { return iterator{start}; }
+  [[nodiscard]] iterator end() noexcept { return iterator{nullptr}; }
+  [[nodiscard]] iterator end() const noexcept { return iterator{nullptr}; }
+
+private:
+  lxb_dom_attr_t* start;
+};
+
+// --- Core API ---
+
+[[nodiscard]] constexpr auto inline has_class(lxb_dom_node_t const* node, std::string_view class_name) noexcept -> bool {
+  if (node == nullptr or class_name.empty() or is_non_element_node(const_cast<lxb_dom_node_t*>(node))) {
+    return false;
+  }
+
+  auto attr_len = size_t{};
+  auto const attr = lxb_dom_element_get_attribute(lxb_dom_interface_element(const_cast<lxb_dom_node_t*>(node)),
+                                                  reinterpret_cast<const lxb_char_t*>("class"), 5, &attr_len);
+  if (attr == nullptr) {
+    return false;
+  }
+
+  auto const attr_view = std::string_view{reinterpret_cast<const char*>(attr), attr_len};
+  auto constexpr delimiters = std::string_view{" \t\n\r\f"};
+
+  auto start = attr_view.find_first_not_of(delimiters);
+  while (start != std::string_view::npos) {
+    auto const end = attr_view.find_first_of(delimiters, start);
+    if (attr_view.substr(start, end - start) == class_name) {
+      return true;
+    }
+    start = attr_view.find_first_not_of(delimiters, end);
+  }
+
+  return false;
+}
+
+auto constexpr inline get_first_element_by_class(lxb_dom_node_t* node, std::string_view class_name) noexcept -> lxb_dom_node_t* {
+  if (node == nullptr or class_name.empty()) {
+    return nullptr;
+  }
+
+  auto const text_walker = +[](lxb_dom_node_t* node, void* ctx) noexcept {
+    auto& [target, result] = *reinterpret_cast<std::pair<std::string_view, lxb_dom_node*>*>(ctx);
+    if (has_class(node, target)) {
+      result = node;
+      return LEXBOR_ACTION_STOP;
+    }
+    return LEXBOR_ACTION_OK;
+  };
+
+  auto target = std::pair<std::string_view, lxb_dom_node*>{class_name, nullptr};
+  lxb_dom_node_simple_walk(node, text_walker, &target);
+  return target.second;
+}
+
+[[nodiscard]] auto inline get_elements_by_class(lxb_dom_node_t* node, std::string_view class_name) -> std::vector<lxb_dom_node_t*> {
+  auto result = std::vector<lxb_dom_node_t*>{};
+  if (node == nullptr or class_name.empty()) {
+    return result;
+  }
+
+  for (auto* current : node_walker{node}) {
+    if (has_class(current, class_name)) {
+      result.push_back(current);
+    }
+  }
+  return result;
+}
+
+[[nodiscard]] auto inline get_deep_text(lxb_dom_node_t const* node, std::string_view const sep = "") -> std::string {
+  if (node == nullptr) {
+    return "";
+  }
+
+  auto const walker = node_walker{const_cast<lxb_dom_node_t*>(node)};
+  auto text_nodes = walker
+    | std::views::filter([](lxb_dom_node_t* n) noexcept { return n->type == LXB_DOM_NODE_TYPE_TEXT; })
+    | std::views::transform([](lxb_dom_node_t* n) noexcept {
+        auto const data = lxb_dom_interface_character_data(n);
+        return std::string_view{reinterpret_cast<const char*>(data->data.data), data->data.length};
+      });
+
+  auto first = true;
+  return std::ranges::fold_left(text_nodes, std::string{}, [sep, &first](std::string acc, std::string_view sv) mutable {
+    if (not first and not sep.empty()) {
+      acc.append(sep);
+    }
+    acc.append(sv);
+    first = false;
+    return acc;
+  });
+}
+
+[[nodiscard]] auto inline set_attr(lxb_dom_element_t* element, std::string_view name, std::string_view value) noexcept -> bool {
+  if (element == nullptr) {
+    return false;
+  }
+  auto const attr = lxb_dom_element_set_attribute(element, 
+    reinterpret_cast<lxb_char_t const*>(name.data()), name.size(),
+    reinterpret_cast<lxb_char_t const*>(value.data()), value.size());
+  return attr != nullptr;
+}
+
+[[nodiscard]] auto inline remove_attr(lxb_dom_element_t* element, std::string_view name) noexcept -> bool {
+  if (element == nullptr) {
+    return false;
+  }
+  auto const status = lxb_dom_element_remove_attribute(element, 
+    reinterpret_cast<lxb_char_t const*>(name.data()), name.size());
+  return status == LXB_STATUS_OK;
+}
+
+[[nodiscard]] auto inline set_text_content(lxb_dom_node_t* node, std::string_view text) noexcept -> bool {
+  if (node == nullptr) {
+    return false;
+  }
+
+  auto* child = lxb_dom_node_first_child(node);
+  while (child != nullptr) {
+    auto* next = lxb_dom_node_next(child);
+    lxb_dom_node_remove(child);
+    lxb_dom_node_destroy(child);
+    child = next;
+  }
+
+  if (text.empty()) {
+    return true;
+  }
+
+  auto* const text_node = lxb_dom_document_create_text_node(node->owner_document, 
+    reinterpret_cast<lxb_char_t const*>(text.data()), text.size());
+  if (text_node == nullptr) {
+    return false;
+  }
+
+  lxb_dom_node_insert_child(node, lxb_dom_interface_node(text_node));
+  return true;
+}
+
+// --- Document RAII ---
+
+struct document_deleter {
+  auto constexpr operator()(lxb_html_document_t* doc) const noexcept -> void {
+    if (doc != nullptr) {
+      lxb_html_document_destroy(doc);
+    }
+  }
+};
+
+using document_ptr = std::unique_ptr<lxb_html_document_t, document_deleter>;
+
+[[nodiscard]] auto inline parse_html(std::string_view const html) noexcept -> std::expected<document_ptr, lxb_status_t> {
+  auto* const doc = lxb_html_document_create();
+  if (doc == nullptr) {
+    return std::unexpected{LXB_STATUS_ERROR_MEMORY_ALLOCATION};
+  }
+
+  auto const status = lxb_html_document_parse(doc, reinterpret_cast<lxb_char_t const*>(html.data()), html.size());
+  if (status != LXB_STATUS_OK) {
+    lxb_html_document_destroy(doc);
+    return std::unexpected{status};
+  }
+
+  return document_ptr{doc};
+}
+
+[[nodiscard]] auto constexpr inline get_root(document_ptr const& doc) noexcept -> lxb_dom_node_t* {
+  if (not doc) {
+    return nullptr;
+  }
+  return lxb_dom_interface_node(doc.get());
+}
+
+// --- Lookup & Attributes ---
+
 auto inline get_element_by_id(lxb_dom_node_t* node, std::string_view id_name) noexcept -> lxb_dom_node_t* {
   if (node == nullptr) {
     return nullptr;
@@ -55,46 +445,8 @@ auto inline get_element_by_id(lxb_dom_node_t* node, std::string_view id_name) no
   return target.second;
 }
 
-/**
- * @brief class名が一致する最初のelementを取得する
- */
-auto inline get_first_element_by_class(lxb_dom_node_t* node, std::string_view class_name) noexcept -> lxb_dom_node_t* {
-  if (node == nullptr) {
-    return nullptr;
-  }
-
-  auto const text_walker = +[](lxb_dom_node_t* node, void* ctx) noexcept {
-    auto& [target, result] = *reinterpret_cast<std::pair<std::string_view, lxb_dom_node*>*>(ctx);
-    if (is_non_element_node(node)) {
-      return LEXBOR_ACTION_OK;
-    }
-
-    auto attr_len = size_t{};
-    auto attr     = lxb_dom_element_get_attribute(lxb_dom_interface_element(node), (const lxb_char_t*)"class", 5, &attr_len);
-    if (attr != nullptr and target == std::string_view{reinterpret_cast<const char*>(attr), attr_len}) {
-      result = node;
-      return LEXBOR_ACTION_STOP;
-    }
-    return LEXBOR_ACTION_OK;
-  };
-
-  auto target = std::pair<std::string_view, lxb_dom_node*>{class_name, nullptr};
-  lxb_dom_node_simple_walk(node, text_walker, &target);
-  return target.second;
-}
-
-/**
- * @brief 指定nodeから指定attributeの値を取得する
- *
- * @param node 属性値を取得するノード
- * @param attr_name 取得対象のattribute名
- * @return auto 指定attributeの値、なければ空文字列
- */
 auto inline get_attr_value(lxb_dom_node_t* node, std::string_view attr_name) noexcept -> std::optional<std::string_view> {
-  if (node == nullptr) {
-    return std::nullopt;
-  }
-  if (is_non_element_node(node)) {
+  if (node == nullptr or is_non_element_node(node)) {
     return std::nullopt;
   }
 
@@ -114,65 +466,6 @@ auto inline get_attr_value(lxb_dom_node_t* node, std::string_view attr_name) noe
   return std::nullopt;
 }
 
-/**
- * @brief ノードのclass属性に指定したクラス名が含まれているかを判定する
- *
- * @param node 判定対象のノード
- * @param class_name 判定するクラス名
- * @return bool class属性にclass_nameが含まれている場合true、それ以外false
- */
-auto inline has_class(lxb_dom_node_t* node, std::string_view class_name) noexcept -> bool {
-  if (class_name.empty()) {
-    return false;
-  }
-  auto const class_attr = get_attr_value(node, "class");
-  if (not class_attr.has_value()) {
-    return false;
-  }
-
-  constexpr auto kWhitespace = std::string_view{" \t\n\r\f"};
-  auto sv = *class_attr;
-  while (not sv.empty()) {
-    auto const start = sv.find_first_not_of(kWhitespace);
-    if (start == std::string_view::npos) {
-      break;
-    }
-    sv.remove_prefix(start);
-
-    auto const end = sv.find_first_of(kWhitespace);
-    if (sv.substr(0, end) == class_name) {
-      return true;
-    }
-    if (end == std::string_view::npos) {
-      break;
-    }
-    sv.remove_prefix(end);
-  }
-  return false;
-}
-
-/**
- * @brief ノードのclass属性に指定した複数のクラス名がすべて含まれているかを判定する
- *
- * @param node 判定対象のノード
- * @param class_names 判定するクラス名のリスト
- * @return bool class属性にclass_namesの全てが含まれている場合true、それ以外false
- */
-auto inline has_class(lxb_dom_node_t* node, std::initializer_list<std::string_view> class_names) noexcept -> bool {
-  if (class_names.size() == 0) {
-    return false;
-  }
-  for (auto const& name : class_names) {
-    if (not has_class(node, name)) {
-      return false;
-    }
-  }
-  return true;
-}
-
-/**
- * @brief 指定nodeの最初の子要素のテキストを取得する
- */
 auto inline get_first_child_text(lxb_dom_node_t* node) noexcept -> std::optional<std::string_view> {
   if (node == nullptr) {
     return std::nullopt;
@@ -187,9 +480,6 @@ auto inline get_first_child_text(lxb_dom_node_t* node) noexcept -> std::optional
   return std::nullopt;
 }
 
-/**
- * @brief 指定nodeの子要素のテキストを全て取得する
- */
 auto inline get_all_children_text(lxb_dom_node_t* node) noexcept -> std::optional<std::string> {
   if (node == nullptr) {
     return std::nullopt;
@@ -210,9 +500,6 @@ auto inline get_all_children_text(lxb_dom_node_t* node) noexcept -> std::optiona
   return result;
 }
 
-/**
- * @brief 指定nodeの子要素のテキストを全て取得する
- */
 auto inline get_all_children_text(lxb_dom_node_t* node, std::string_view const sep) noexcept -> std::optional<std::string> {
   if (node == nullptr) {
     return std::nullopt;
@@ -299,174 +586,6 @@ auto inline to_string(lxb_dom_attr_t* attr) noexcept {
   }
   return std::string_view{reinterpret_cast<const char*>(attr_val_data), attr_val_len};
 }
-
-class node_walker : public std::ranges::view_interface<node_walker> {
-public:
-  using value_type = lxb_dom_node_t*;
-
-  explicit node_walker(lxb_dom_node_t* node = nullptr) : start(node) { }
-
-  class iterator {
-  public:
-    using iterator_concept = std::forward_iterator_tag;
-    using iterator_category = std::forward_iterator_tag;
-    using value_type = lxb_dom_node_t*;
-    using difference_type = std::ptrdiff_t;
-    using pointer = lxb_dom_node_t**;
-    using reference = lxb_dom_node_t*&;
-
-    iterator(lxb_dom_node_t* node = nullptr, lxb_dom_node_t* end = nullptr) : start(node), current(end) { }
-    // iterator(const iterator&) = default;
-    // iterator(iterator&&) = default;
-
-    iterator& operator++() noexcept {
-      if (current == start) {
-        return *this;
-      }
-      if (current->first_child != nullptr) {
-        current = current->first_child;
-        return *this;
-      }
-      while(current != start && current->next == nullptr) {
-        current = current->parent;
-      }
-      if (current != start) {
-        current = current->next;
-      }
-      return *this;
-    }
-
-    // TODO: 最適化
-    iterator operator++(int) noexcept {
-      auto temp = *this;
-      ++*this;
-      return temp;
-    }
-
-    auto operator==(iterator const &rhs) const noexcept { return start == rhs.start and current == rhs.current; }
-    lxb_dom_node_t* const& operator*() const noexcept { return current; }
-
-  private:
-    lxb_dom_node_t* start;
-    lxb_dom_node_t* current;
-  };
-
-
-  [[nodiscard]] iterator begin() noexcept { return iterator{start, start ? start->first_child : nullptr}; }
-  [[nodiscard]] iterator begin() const noexcept { return iterator{start, start ? start->first_child : nullptr}; }
-  [[nodiscard]] iterator end() noexcept { return iterator{start, start}; }
-  [[nodiscard]] iterator end() const noexcept { return iterator{start, start}; }
-
-private:
-  lxb_dom_node_t* start;
-};
-
-class node_sibling_walker : public std::ranges::view_interface<node_sibling_walker> {
-public:
-  using value_type = lxb_dom_node_t*;
-
-  explicit node_sibling_walker(lxb_dom_node_t* node = nullptr) : start(node) { }
-
-  class iterator {
-  public:
-    using iterator_concept = std::forward_iterator_tag;
-    using iterator_category = std::forward_iterator_tag;
-    using value_type = lxb_dom_node_t*;
-    using difference_type = std::ptrdiff_t;
-    using pointer = lxb_dom_node_t**;
-    using reference = lxb_dom_node_t*&;
-
-    iterator(lxb_dom_node_t* node = nullptr) : current(node) { }
-    // iterator(const iterator&) = default;
-    // iterator(iterator&&) = default;
-
-    iterator& operator++() noexcept {
-      if (current == nullptr) {
-        return *this;
-      }
-      current = current->next;
-      return *this;
-    }
-
-    // TODO: 最適化
-    iterator operator++(int) noexcept {
-      auto temp = *this;
-      ++*this;
-      return temp;
-    }
-
-    auto operator==(iterator const &rhs) const noexcept { return current == rhs.current; }
-    lxb_dom_node_t* const& operator*() const noexcept { return current; }
-
-  private:
-    lxb_dom_node_t* current;
-  };
-
-
-  [[nodiscard]] iterator begin() noexcept { return iterator{start}; }
-  [[nodiscard]] iterator begin() const noexcept { return iterator{start}; }
-  [[nodiscard]] iterator end() noexcept { return iterator{nullptr}; }
-  [[nodiscard]] iterator end() const noexcept { return iterator{nullptr}; }
-
-private:
-  lxb_dom_node_t* start;
-};
-
-class attr_walker : public std::ranges::view_interface<attr_walker> {
-public:
-  using value_type = lxb_dom_attr_t*;
-
-  explicit attr_walker(lxb_dom_node_t* node) : start(nullptr) {
-    if (not is_non_element_node(node)) {
-      start = lxb_dom_element_first_attribute(lxb_dom_interface_element(node));
-    }
-  }
-  attr_walker(lxb_dom_attr_t* attr = nullptr) : start(attr) {  }
-
-  class iterator {
-  public:
-    using iterator_concept = std::forward_iterator_tag;
-    using iterator_category = std::forward_iterator_tag;
-    using value_type = lxb_dom_attr_t*;
-    using difference_type = std::ptrdiff_t;
-    using pointer = lxb_dom_attr_t**;
-    using reference = lxb_dom_attr_t*&;
-
-    iterator(lxb_dom_attr_t* node = nullptr) : current(node) { }
-    // iterator(const iterator&) = default;
-    // iterator(iterator&&) = default;
-
-    iterator& operator++() noexcept {
-      if (current == nullptr) {
-        return *this;
-      }
-      current = lxb_dom_element_next_attribute(current);
-      return *this;
-    }
-
-    // TODO: 最適化
-    iterator operator++(int) noexcept {
-      auto temp = *this;
-      ++*this;
-      return temp;
-    }
-
-    auto operator==(iterator const &rhs) const noexcept { return current == rhs.current; }
-    lxb_dom_attr_t* const& operator*() const noexcept { return current; }
-
-  private:
-    lxb_dom_attr_t* current;
-  };
-
-
-  [[nodiscard]] iterator begin() noexcept { return iterator{start}; }
-  [[nodiscard]] iterator begin() const noexcept { return iterator{start}; }
-  [[nodiscard]] iterator end() noexcept { return iterator{nullptr}; }
-  [[nodiscard]] iterator end() const noexcept { return iterator{nullptr}; }
-
-private:
-  lxb_dom_attr_t* start;
-};
 
 auto inline tag_name(lxb_tag_id_t const tag_id) {
   using namespace std::string_view_literals;
@@ -671,30 +790,126 @@ auto inline tag_name(lxb_tag_id_t const tag_id) {
   }
 }
 
+namespace detail {
+
+struct css_parser_deleter {
+  void operator()(lxb_css_parser_t* p) const noexcept { lxb_css_parser_destroy(p, true); }
+};
+struct css_selectors_deleter {
+  void operator()(lxb_css_selector_list_t* l) const noexcept { lxb_css_selector_list_destroy(l); }
+};
+struct selectors_deleter {
+  void operator()(lxb_selectors_t* s) const noexcept { lxb_selectors_destroy(s, true); }
+};
+
+using css_parser_ptr = std::unique_ptr<lxb_css_parser_t, css_parser_deleter>;
+using css_selector_list_ptr = std::unique_ptr<lxb_css_selector_list_t, css_selectors_deleter>;
+using selectors_ptr = std::unique_ptr<lxb_selectors_t, selectors_deleter>;
+
+inline auto serialize_callback(const lxb_char_t* data, size_t len, void* ctx) noexcept -> lxb_status_t {
+  auto* const str = static_cast<std::string*>(ctx);
+  str->append(reinterpret_cast<const char*>(data), len);
+  return LXB_STATUS_OK;
+}
+
+} // namespace detail
+
+/**
+ * @brief ノードの外部 HTML（自身を含む）を取得する
+ */
+[[nodiscard]] auto inline outer_html(lxb_dom_node_t const* node) -> std::string {
+  if (node == nullptr) return "";
+  auto result = std::string{};
+  result.reserve(128);
+  lxb_html_serialize_tree_cb(const_cast<lxb_dom_node_t*>(node), detail::serialize_callback, &result);
+  return result;
+}
+
+/**
+ * @brief ノードの内部 HTML（子ノード群）を取得する
+ */
+[[nodiscard]] auto inline inner_html(lxb_dom_node_t const* node) -> std::string {
+  if (node == nullptr) return "";
+  auto result = std::string{};
+  result.reserve(128);
+  for (auto* child = lxb_dom_node_first_child(const_cast<lxb_dom_node_t*>(node)); child != nullptr; child = lxb_dom_node_next(child)) {
+    lxb_html_serialize_tree_cb(child, detail::serialize_callback, &result);
+  }
+  return result;
+}
+
+/**
+ * @brief CSS セレクタにマッチする最初の要素を返す
+ */
+[[nodiscard]] auto inline query_selector(lxb_dom_node_t* node, std::string_view selector) -> lxb_dom_node_t* {
+  if (node == nullptr or selector.empty()) return nullptr;
+
+  detail::css_parser_ptr parser{lxb_css_parser_create()};
+  lxb_css_parser_init(parser.get(), nullptr);
+
+  detail::css_selector_list_ptr list{lxb_css_selectors_parse(parser.get(), 
+    reinterpret_cast<const lxb_char_t*>(selector.data()), selector.size())};
+  if (not list) return nullptr;
+
+  detail::selectors_ptr selectors{lxb_selectors_create()};
+  lxb_selectors_init(selectors.get());
+
+  lxb_dom_node_t* result = nullptr;
+  auto const cb = [](lxb_dom_node_t* n, lxb_css_selector_specificity_t spec, void* ctx) -> lxb_status_t {
+    *static_cast<lxb_dom_node_t**>(ctx) = n;
+    return LXB_STATUS_STOP;
+  };
+
+
+  lxb_selectors_find(selectors.get(), node, list.get(), cb, &result);
+  return result;
+}
+
+/**
+ * @brief CSS セレクタにマッチするすべての要素を返す
+ */
+[[nodiscard]] auto inline query_selector_all(lxb_dom_node_t* node, std::string_view selector) -> std::vector<lxb_dom_node_t*> {
+  if (node == nullptr or selector.empty()) return {};
+
+  detail::css_parser_ptr parser{lxb_css_parser_create()};
+  lxb_css_parser_init(parser.get(), nullptr);
+
+  detail::css_selector_list_ptr list{lxb_css_selectors_parse(parser.get(), 
+    reinterpret_cast<const lxb_char_t*>(selector.data()), selector.size())};
+  if (not list) return {};
+
+  detail::selectors_ptr selectors{lxb_selectors_create()};
+  lxb_selectors_init(selectors.get());
+
+  std::vector<lxb_dom_node_t*> result;
+  auto const cb = [](lxb_dom_node_t* n, lxb_css_selector_specificity_t spec, void* ctx) -> lxb_status_t {
+    static_cast<std::vector<lxb_dom_node_t*>*>(ctx)->push_back(n);
+    return LXB_STATUS_OK;
+  };
+
+  lxb_selectors_find(selectors.get(), node, list.get(), cb, &result);
+  return result;
+}
+
 } // namespace lexborpp
 
 namespace std::ranges {
 
-template <>
-inline constexpr bool enable_view<lexborpp::node_walker> = true;
+// enable_view specializations are not needed when inheriting from view_interface,
+// but they must NOT conflict if provided. It's safer to let view_interface handle it.
 
 template <>
 inline constexpr bool enable_borrowed_range<lexborpp::node_walker> = true;
 
 template <>
-inline constexpr bool enable_view<lexborpp::node_sibling_walker> = true;
-
-template <>
 inline constexpr bool enable_borrowed_range<lexborpp::node_sibling_walker> = true;
 
 template <>
-inline constexpr bool enable_view<lexborpp::attr_walker> = true;
+inline constexpr bool enable_borrowed_range<lexborpp::node_prev_sibling_walker> = true;
 
 template <>
 inline constexpr bool enable_borrowed_range<lexborpp::attr_walker> = true;
 
 }  // namespace std::ranges
-
-
 
 #endif /* __LEXBORPP_HPP__ */

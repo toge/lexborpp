@@ -94,6 +94,140 @@ auto find_attr(lxb_dom_node_t* node, std::string_view name) noexcept -> lxb_dom_
 
 }  // namespace
 
+TEST_CASE("parse_html and document_ptr handle lifecycle safely") {
+  SECTION("Valid HTML parsing succeeds") {
+    auto doc_expected = lexborpp::parse_html(kHtml);
+    REQUIRE(doc_expected.has_value());
+
+    auto const& doc = doc_expected.value();
+    auto* const root = lexborpp::get_root(doc);
+    REQUIRE(root != nullptr);
+
+    // Verify interaction with existing API
+    auto* const leaf_b = lexborpp::get_element_by_id(root, "leaf-b");
+    REQUIRE(leaf_b != nullptr);
+    REQUIRE(lexborpp::get_attr_value(leaf_b, "id") == "leaf-b");
+  }
+
+  SECTION("Empty HTML parsing is handled") {
+    auto doc_expected = lexborpp::parse_html("");
+    REQUIRE(doc_expected.has_value()); // Lexbor usually succeeds with empty input
+
+    auto const& doc = doc_expected.value();
+    auto* const root = lexborpp::get_root(doc);
+    REQUIRE(root != nullptr);
+  }
+
+  SECTION("document_ptr lifecycle") {
+    // This is more of a compile-time check for deleter,
+    // but ensures no crash on destruction.
+    {
+      auto doc_expected = lexborpp::parse_html("<div></div>");
+      REQUIRE(doc_expected.has_value());
+    } // doc destroyed here
+    SUCCEED("Destruction completed without crash");
+  }
+}
+
+TEST_CASE("lexborpp CSS selector and manipulation functions") {
+  auto const html = R"HTML(<div id="root"><div id="content" class="entry"><p>First</p><p class="target">Second</p><span><b>Bold</b></span></div></div>)HTML";
+  auto doc_expected = lexborpp::parse_html(html);
+  REQUIRE(doc_expected.has_value());
+  auto* root = lexborpp::get_root(doc_expected.value());
+
+  SECTION("CSS selectors (query_selector)") {
+    auto* content = lexborpp::query_selector(root, "div#content");
+    REQUIRE(content != nullptr);
+    REQUIRE(lexborpp::get_attr_value(content, "id") == "content");
+
+    auto* entry = lexborpp::query_selector(root, "div.entry");
+    REQUIRE(entry == content);
+
+    auto* bold = lexborpp::query_selector(root, "span > b");
+    REQUIRE(bold != nullptr);
+    REQUIRE(lexborpp::get_deep_text(bold) == "Bold");
+
+    REQUIRE(lexborpp::query_selector(root, "non-existent") == nullptr);
+    REQUIRE(lexborpp::query_selector(root, "invalid[@selector") == nullptr);
+    REQUIRE(lexborpp::query_selector(nullptr, "div") == nullptr);
+  }
+
+  SECTION("CSS selectors (query_selector_all)") {
+    auto ps = lexborpp::query_selector_all(root, "p");
+    REQUIRE(ps.size() == 2);
+    REQUIRE(lexborpp::get_deep_text(ps[0]) == "First");
+    REQUIRE(lexborpp::get_deep_text(ps[1]) == "Second");
+
+    REQUIRE(lexborpp::query_selector_all(root, "h1").empty());
+  }
+
+  SECTION("DOM manipulation (attributes)") {
+    auto* content = lexborpp::query_selector(root, "#content");
+    auto* element = lexborpp::as_element(content);
+
+    REQUIRE(lexborpp::set_attr(element, "data-test", "value"));
+    REQUIRE(lexborpp::get_attr_value(content, "data-test") == "value");
+
+    REQUIRE(lexborpp::set_attr(element, "class", "new-class"));
+    REQUIRE(lexborpp::has_class(content, "new-class"));
+
+    REQUIRE(lexborpp::remove_attr(element, "data-test"));
+    REQUIRE_FALSE(lexborpp::get_attr_value(content, "data-test").has_value());
+
+    REQUIRE_FALSE(lexborpp::remove_attr(nullptr, "id"));
+  }
+
+  SECTION("DOM manipulation (text content)") {
+    auto* p = lexborpp::query_selector(root, "p.target");
+    REQUIRE(lexborpp::set_text_content(p, "New Text"));
+    REQUIRE(lexborpp::get_deep_text(p) == "New Text");
+
+    REQUIRE(lexborpp::set_text_content(p, ""));
+    REQUIRE(lexborpp::get_deep_text(p) == "");
+  }
+
+  SECTION("Serialization") {
+    auto* bold = lexborpp::query_selector(root, "b");
+    REQUIRE(lexborpp::outer_html(bold) == "<b>Bold</b>");
+    REQUIRE(lexborpp::inner_html(bold) == "Bold");
+
+    auto* content = lexborpp::query_selector(root, "#content");
+    lexborpp::set_attr(lexborpp::as_element(content), "title", "hello");
+    auto const html_str = lexborpp::outer_html(content);
+    REQUIRE(html_str.find("title=\"hello\"") != std::string::npos);
+  }
+}
+
+TEST_CASE("node_prev_sibling_walker traverses backwards") {
+  auto const html = "<ul><li id='a'>A</li><li id='b'>B</li><li id='c'>C</li></ul>";
+  auto doc_expected = lexborpp::parse_html(html);
+  auto* root = lexborpp::get_root(doc_expected.value());
+
+  auto* c = lexborpp::query_selector(root, "#c");
+  REQUIRE(c != nullptr);
+
+  auto walker = lexborpp::node_prev_sibling_walker{c};
+  auto ids = std::vector<std::string>{};
+  for (auto* node : walker) {
+    if (auto id = lexborpp::get_attr_value(node, "id")) {
+      ids.push_back(std::string{*id});
+    }
+  }
+
+  REQUIRE(ids == std::vector<std::string>{"b", "a"});
+  REQUIRE(std::ranges::distance(walker) == 2);
+
+  auto* a = lexborpp::query_selector(root, "#a");
+  REQUIRE(std::ranges::distance(lexborpp::node_prev_sibling_walker{a}) == 0);
+
+  // Filter test
+  auto filtered = lexborpp::node_prev_sibling_walker{c}
+    | std::views::filter([](lxb_dom_node_t* n) {
+        return lexborpp::get_attr_value(n, "id") == "a";
+      });
+  REQUIRE(std::ranges::distance(filtered) == 1);
+}
+
 TEST_CASE("lexborpp lookup helpers find expected nodes") {
   auto fixture = html_document_fixture{kHtml};
 
@@ -120,27 +254,36 @@ TEST_CASE("lexborpp lookup helpers find expected nodes") {
   REQUIRE(lexborpp::get_element_by_id(document, "missing") == nullptr);
   REQUIRE(lexborpp::get_element_by_id(nullptr, "leaf-b") == nullptr);
 
-  REQUIRE(lexborpp::get_first_element_by_class(document, "match target-class") == class_target);
-  REQUIRE(lexborpp::get_first_element_by_class(document, "match") == class_second);
-  REQUIRE(lexborpp::get_first_element_by_class(document, "target-class") == nullptr);
-  REQUIRE(lexborpp::get_first_element_by_class(nullptr, "match") == nullptr);
-
+  // has_class tests
   REQUIRE(lexborpp::has_class(class_target, "match"));
   REQUIRE(lexborpp::has_class(class_target, "target-class"));
-  REQUIRE_FALSE(lexborpp::has_class(class_target, "other"));
-  REQUIRE(lexborpp::has_class(class_second, "match"));
-  REQUIRE_FALSE(lexborpp::has_class(class_second, "target-class"));
+  REQUIRE_FALSE(lexborpp::has_class(class_target, "mat"));         // partial match
+  REQUIRE_FALSE(lexborpp::has_class(class_target, "target-clas")); // partial match
+  REQUIRE_FALSE(lexborpp::has_class(class_target, ""));            // empty class
+  REQUIRE_FALSE(lexborpp::has_class(container, "match"));
   REQUIRE_FALSE(lexborpp::has_class(nullptr, "match"));
-  REQUIRE_FALSE(lexborpp::has_class(class_target, ""));
-  REQUIRE_FALSE(lexborpp::has_class(container, "missing"));
-  REQUIRE_FALSE(lexborpp::has_class(text_node, "match"));
 
-  REQUIRE(lexborpp::has_class(class_target, {"match", "target-class"}));
-  REQUIRE(lexborpp::has_class(class_target, {"target-class", "match"}));
-  REQUIRE_FALSE(lexborpp::has_class(class_target, {"match", "other"}));
-  REQUIRE_FALSE(lexborpp::has_class(class_second, {"match", "target-class"}));
-  REQUIRE_FALSE(lexborpp::has_class(nullptr, {"match"}));
-  REQUIRE_FALSE(lexborpp::has_class(class_target, {}));
+  // Multi-class attribute with different whitespaces
+  auto* attrs_node = require_node(fixture, "attrs");
+  REQUIRE(lexborpp::has_class(attrs_node, "alpha"));
+  REQUIRE(lexborpp::has_class(attrs_node, "beta"));
+
+  // get_first_element_by_class tests
+  REQUIRE(lexborpp::get_first_element_by_class(document, "match") == class_target);
+  REQUIRE(lexborpp::get_first_element_by_class(document, "target-class") == class_target);
+  REQUIRE(lexborpp::get_first_element_by_class(document, "match target-class") == nullptr); // must be single token
+  REQUIRE(lexborpp::get_first_element_by_class(nullptr, "match") == nullptr);
+
+  // get_elements_by_class tests
+  auto const matches = lexborpp::get_elements_by_class(document, "match");
+  REQUIRE(matches.size() == 2);
+  REQUIRE(matches[0] == class_target);
+  REQUIRE(matches[1] == class_second);
+
+  auto const alpha_matches = lexborpp::get_elements_by_class(document, "alpha");
+  REQUIRE(alpha_matches.size() == 2);
+  REQUIRE(alpha_matches[0] == container);
+  REQUIRE(alpha_matches[1] == attrs_node);
 }
 
 TEST_CASE("lexborpp attribute and text helpers return direct content") {
@@ -218,6 +361,32 @@ TEST_CASE("lexborpp string helpers expose node and attribute text") {
   REQUIRE(lexborpp::to_string(attr) == "main");
   REQUIRE(lexborpp::to_name_string(nullptr).empty());
   REQUIRE(lexborpp::to_string(static_cast<lxb_dom_attr_t*>(nullptr)).empty());
+}
+
+TEST_CASE("get_deep_text collects all descendant text nodes") {
+  auto const deep_html = R"HTML(<div id="deep"><span>Hello</span> <span>World</span><p>!</p></div>)HTML";
+  auto fixture = html_document_fixture{deep_html};
+  auto* node = fixture.by_id("deep");
+  REQUIRE(node != nullptr);
+
+  // get_all_children_text only gets direct children (none in this case, except whitespace if any)
+  // In deep_html, direct children are span, text( ), span, p.
+  auto const all_children = lexborpp::get_all_children_text(node);
+  REQUIRE(all_children.has_value());
+  REQUIRE(*all_children == " ");
+
+  // get_deep_text gets everything
+  REQUIRE(lexborpp::get_deep_text(node) == "Hello World!");
+  REQUIRE(lexborpp::get_deep_text(node, "|") == "Hello| |World|!");
+
+  // Empty/None cases
+  auto empty_fixture = html_document_fixture{"<div id='empty'></div>"};
+  REQUIRE(lexborpp::get_deep_text(empty_fixture.by_id("empty")) == "");
+  REQUIRE(lexborpp::get_deep_text(nullptr) == "");
+
+  // Single text node case
+  auto single_fixture = html_document_fixture{"<div id='single'>Text</div>"};
+  REQUIRE(lexborpp::get_deep_text(single_fixture.by_id("single")) == "Text");
 }
 
 TEST_CASE("node_walker traverses descendants depth first") {
