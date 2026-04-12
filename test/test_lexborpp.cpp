@@ -192,7 +192,7 @@ TEST_CASE("lexborpp CSS selector and manipulation functions") {
     REQUIRE(lexborpp::inner_html(bold) == "Bold");
 
     auto* content = lexborpp::query_selector(root, "#content");
-    lexborpp::set_attr(lexborpp::as_element(content), "title", "hello");
+    REQUIRE(lexborpp::set_attr(lexborpp::as_element(content), "title", "hello"));
     auto const html_str = lexborpp::outer_html(content);
     REQUIRE(html_str.find("title=\"hello\"") != std::string::npos);
   }

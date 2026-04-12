@@ -22,6 +22,38 @@ namespace lexborpp {
 
 // --- Forward Declarations & Helpers ---
 
+auto inline to_string(lxb_dom_node_t* node) noexcept {
+  if (node == nullptr || node->type != LXB_DOM_NODE_TYPE_TEXT) {
+    return std::string_view{};
+  }
+  auto const data = lxb_dom_interface_character_data(node);
+  return std::string_view{reinterpret_cast<const char*>(data->data.data), data->data.length};
+}
+
+auto inline to_name_string(lxb_dom_attr_t* attr) noexcept {
+  if (attr == nullptr) {
+    return std::string_view{};
+  }
+  auto attr_val_len  = size_t{};
+  auto attr_val_data = lxb_dom_attr_qualified_name(attr, &attr_val_len);
+  if (attr_val_data == nullptr) {
+    return std::string_view{};
+  }
+  return std::string_view{reinterpret_cast<const char*>(attr_val_data), attr_val_len};
+}
+
+auto inline to_string(lxb_dom_attr_t* attr) noexcept {
+  if (attr == nullptr) {
+    return std::string_view{};
+  }
+  auto attr_val_len  = size_t{};
+  auto attr_val_data = lxb_dom_attr_value(attr, &attr_val_len);
+  if (attr_val_data == nullptr) {
+    return std::string_view{};
+  }
+  return std::string_view{reinterpret_cast<const char*>(attr_val_data), attr_val_len};
+}
+
 auto constexpr inline is_non_element_node(lxb_dom_node_t* node) noexcept -> bool {
   if (node == nullptr) {
     return true;
@@ -390,7 +422,7 @@ auto inline get_first_element_by_class(lxb_dom_node_t* node, std::string_view cl
       return "";
     }
     auto result = std::string{reinterpret_cast<const char*>(text), len};
-    lexbor_free(text);
+    lxb_dom_document_destroy_text(node->owner_document, text);
     return result;
   }
 
@@ -630,38 +662,6 @@ auto inline get_sibling_element_by_op(lxb_dom_node_t* node, Op op) noexcept -> l
     }
   }
   return nullptr;
-}
-
-auto inline to_string(lxb_dom_node_t* node) noexcept {
-  if (node == nullptr || node->type != LXB_DOM_NODE_TYPE_TEXT) {
-    return std::string_view{};
-  }
-  auto const data = lxb_dom_interface_character_data(node);
-  return std::string_view{reinterpret_cast<const char*>(data->data.data), data->data.length};
-}
-
-auto inline to_name_string(lxb_dom_attr_t* attr) noexcept {
-  if (attr == nullptr) {
-    return std::string_view{};
-  }
-  auto attr_val_len  = size_t{};
-  auto attr_val_data = lxb_dom_attr_qualified_name(attr, &attr_val_len);
-  if (attr_val_data == nullptr) {
-    return std::string_view{};
-  }
-  return std::string_view{reinterpret_cast<const char*>(attr_val_data), attr_val_len};
-}
-
-auto inline to_string(lxb_dom_attr_t* attr) noexcept {
-  if (attr == nullptr) {
-    return std::string_view{};
-  }
-  auto attr_val_len  = size_t{};
-  auto attr_val_data = lxb_dom_attr_value(attr, &attr_val_len);
-  if (attr_val_data == nullptr) {
-    return std::string_view{};
-  }
-  return std::string_view{reinterpret_cast<const char*>(attr_val_data), attr_val_len};
 }
 
 auto inline tag_name(lxb_tag_id_t const tag_id) {
@@ -932,7 +932,7 @@ inline auto serialize_callback(const lxb_char_t* data, size_t len, void* ctx) no
   lxb_selectors_init(selectors.get());
 
   lxb_dom_node_t* result = nullptr;
-  auto const cb = [](lxb_dom_node_t* n, lxb_css_selector_specificity_t spec, void* ctx) -> lxb_status_t {
+  auto const cb = [](lxb_dom_node_t* n, [[maybe_unused]] lxb_css_selector_specificity_t spec, void* ctx) -> lxb_status_t {
     *static_cast<lxb_dom_node_t**>(ctx) = n;
     return LXB_STATUS_STOP;
   };
@@ -958,7 +958,7 @@ inline auto serialize_callback(const lxb_char_t* data, size_t len, void* ctx) no
   lxb_selectors_init(selectors.get());
 
   std::vector<lxb_dom_node_t*> result;
-  auto const cb = [](lxb_dom_node_t* n, lxb_css_selector_specificity_t spec, void* ctx) -> lxb_status_t {
+  auto const cb = [](lxb_dom_node_t* n, [[maybe_unused]] lxb_css_selector_specificity_t spec, void* ctx) -> lxb_status_t {
     static_cast<std::vector<lxb_dom_node_t*>*>(ctx)->push_back(n);
     return LXB_STATUS_OK;
   };
