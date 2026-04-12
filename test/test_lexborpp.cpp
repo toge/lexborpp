@@ -372,29 +372,68 @@ TEST_CASE("lexborpp string helpers expose node and attribute text") {
 }
 
 TEST_CASE("get_deep_text collects all descendant text nodes") {
-  auto const deep_html = R"HTML(<div id="deep"><span>Hello</span> <span>World</span><p>!</p></div>)HTML";
-  auto fixture = html_document_fixture{deep_html};
-  auto* node = fixture.by_id("deep");
-  REQUIRE(node != nullptr);
+  SECTION("Direct text node") {
+    auto const html = R"HTML(<div id="target">Text</div>)HTML";
+    auto fixture = html_document_fixture{html};
+    auto* node = fixture.by_id("target");
+    auto* text_node = lxb_dom_node_first_child(node);
+    REQUIRE(text_node != nullptr);
+    REQUIRE(text_node->type == LXB_DOM_NODE_TYPE_TEXT);
+    
+    REQUIRE(lexborpp::get_deep_text(text_node) == "Text");
+    REQUIRE(lexborpp::get_deep_text(text_node, "|") == "Text");
+  }
 
-  // get_all_children_text only gets direct children (none in this case, except whitespace if any)
-  // In deep_html, direct children are span, text( ), span, p.
-  auto const all_children = lexborpp::get_all_children_text(node);
-  REQUIRE(all_children.has_value());
-  REQUIRE(*all_children == " ");
+  SECTION("Complex nested element") {
+    auto const html = R"HTML(<p id="target">Hello <b>World</b></p>)HTML";
+    auto fixture = html_document_fixture{html};
+    auto* node = fixture.by_id("target");
+    REQUIRE(node != nullptr);
 
-  // get_deep_text gets everything
-  REQUIRE(lexborpp::get_deep_text(node) == "Hello World!");
-  REQUIRE(lexborpp::get_deep_text(node, "|") == "Hello| |World|!");
+    // Default: case A (native API)
+    REQUIRE(lexborpp::get_deep_text(node) == "Hello World");
+    // With separator: case B (node_walker)
+    // In "<p>Hello <b>World</b></p>", nodes are: text("Hello "), b(text("World"))
+    // get_deep_text(node, " ") -> "Hello " + " " + "World" = "Hello  World"
+    REQUIRE(lexborpp::get_deep_text(node, " ") == "Hello  World");
+  }
 
-  // Empty/None cases
-  auto empty_fixture = html_document_fixture{"<div id='empty'></div>"};
-  REQUIRE(lexborpp::get_deep_text(empty_fixture.by_id("empty")) == "");
-  REQUIRE(lexborpp::get_deep_text(nullptr) == "");
+  SECTION("Separator test with simple nested") {
+    auto const html = R"HTML(<p id="target">Hello<b>World</b></p>)HTML";
+    auto fixture = html_document_fixture{html};
+    auto* node = fixture.by_id("target");
+    REQUIRE(lexborpp::get_deep_text(node) == "HelloWorld");
+    REQUIRE(lexborpp::get_deep_text(node, " ") == "Hello World");
+  }
 
-  // Single text node case
-  auto single_fixture = html_document_fixture{"<div id='single'>Text</div>"};
-  REQUIRE(lexborpp::get_deep_text(single_fixture.by_id("single")) == "Text");
+  SECTION("Element with only text node") {
+    auto const html = R"HTML(<div id="target">Only Text</div>)HTML";
+    auto fixture = html_document_fixture{html};
+    auto* node = fixture.by_id("target");
+    REQUIRE(lexborpp::get_deep_text(node) == "Only Text");
+    REQUIRE(lexborpp::get_deep_text(node, "-") == "Only Text");
+  }
+
+  SECTION("No text nodes") {
+    auto const html = R"HTML(<div id="target"><span></span><p></p></div>)HTML";
+    auto fixture = html_document_fixture{html};
+    auto* node = fixture.by_id("target");
+    REQUIRE(lexborpp::get_deep_text(node) == "");
+    REQUIRE(lexborpp::get_deep_text(node, " ") == "");
+  }
+
+  SECTION("nullptr handling") {
+    REQUIRE(lexborpp::get_deep_text(nullptr) == "");
+    REQUIRE(lexborpp::get_deep_text(nullptr, " ") == "");
+  }
+
+  SECTION("Deeply nested nodes") {
+    auto const deep_html = R"HTML(<div id="deep"><span>Hello</span> <span>World</span><p>!</p></div>)HTML";
+    auto fixture = html_document_fixture{deep_html};
+    auto* node = fixture.by_id("deep");
+    REQUIRE(lexborpp::get_deep_text(node) == "Hello World!");
+    REQUIRE(lexborpp::get_deep_text(node, "|") == "Hello| |World|!");
+  }
 }
 
 TEST_CASE("node_walker traverses descendants depth first") {

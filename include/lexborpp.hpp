@@ -358,11 +358,43 @@ auto inline get_first_element_by_class(lxb_dom_node_t* node, std::string_view cl
   return result;
 }
 
-[[nodiscard]] auto inline get_deep_text(lxb_dom_node_t const* node, std::string_view const sep = "") -> std::string {
+/**
+ * @brief 全子孫テキストノードを結合して取得する。
+ * 
+ * @param node 対象のノード
+ * @param sep 各テキストノードの間に挿入するセパレータ（デフォルトは空文字列）
+ * @return std::string 結合されたテキスト文字列
+ * 
+ * @note 
+ * get_first_child_text  → 直下の最初のテキストノードのみ
+ * get_all_children_text → 直下のテキストノードのみ（孫以下除外）
+ * get_deep_text         → 全子孫テキストノード（本関数）
+ * 
+ * sep が空文字列の場合は Lexbor ネイティブ API (lxb_dom_node_text_content) を使用し、
+ * それ以外の場合は node_walker を用いてテキストを結合する。
+ */
+[[nodiscard]] auto inline get_deep_text(lxb_dom_node_t const* node, std::string_view sep = "") -> std::string {
   if (node == nullptr) {
     return "";
   }
 
+  if (node->type == LXB_DOM_NODE_TYPE_TEXT) {
+    return std::string{to_string(const_cast<lxb_dom_node_t*>(node))};
+  }
+
+  if (sep.empty()) {
+    // 案 A — Lexbor ネイティブ API を使う（推奨）
+    auto len = size_t{};
+    auto* const text = lxb_dom_node_text_content(const_cast<lxb_dom_node_t*>(node), &len);
+    if (text == nullptr) {
+      return "";
+    }
+    auto result = std::string{reinterpret_cast<const char*>(text), len};
+    lexbor_free(text);
+    return result;
+  }
+
+  // 案 B — node_walker を使う
   auto const walker = node_walker{const_cast<lxb_dom_node_t*>(node)};
   auto text_nodes = walker
     | std::views::filter([](lxb_dom_node_t* n) noexcept { return n->type == LXB_DOM_NODE_TYPE_TEXT; })
@@ -373,7 +405,7 @@ auto inline get_first_element_by_class(lxb_dom_node_t* node, std::string_view cl
 
   auto first = true;
   return std::ranges::fold_left(text_nodes, std::string{}, [sep, &first](std::string acc, std::string_view sv) mutable {
-    if (not first and not sep.empty()) {
+    if (not first) {
       acc.append(sep);
     }
     acc.append(sv);
