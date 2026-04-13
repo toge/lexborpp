@@ -188,7 +188,7 @@ class node_prev_sibling_walker : public std::ranges::view_interface<node_prev_si
 public:
   using value_type = lxb_dom_node_t*;
 
-  explicit node_prev_sibling_walker(lxb_dom_node_t* node = nullptr) 
+  explicit node_prev_sibling_walker(lxb_dom_node_t* node = nullptr)
     : start(node ? node->prev : nullptr) { }
 
   class iterator {
@@ -240,7 +240,7 @@ public:
       start = lxb_dom_element_first_attribute(lxb_dom_interface_element(node));
     }
   }
-  
+
   attr_walker(lxb_dom_attr_t* attr = nullptr) : start(attr) { }
 
   class iterator {
@@ -328,6 +328,10 @@ private:
  * @return bool すべてのクラスを持っている場合はtrue、そうでない場合はfalse
  */
 [[nodiscard]] constexpr auto inline has_class(lxb_dom_node_t const* node, std::initializer_list<std::string_view> class_names) noexcept -> bool {
+  if (class_names.size() == 0 or node == nullptr) {
+    return false;
+  }
+
   for (auto const& name : class_names) {
     if (not has_class(node, name)) {
       return false;
@@ -392,16 +396,16 @@ auto inline get_first_element_by_class(lxb_dom_node_t* node, std::string_view cl
 
 /**
  * @brief 全子孫テキストノードを結合して取得する。
- * 
+ *
  * @param node 対象のノード
  * @param sep 各テキストノードの間に挿入するセパレータ（デフォルトは空文字列）
  * @return std::string 結合されたテキスト文字列
- * 
- * @note 
+ *
+ * @note
  * get_first_child_text  → 直下の最初のテキストノードのみ
  * get_all_children_text → 直下のテキストノードのみ（孫以下除外）
  * get_deep_text         → 全子孫テキストノード（本関数）
- * 
+ *
  * sep が空文字列の場合は Lexbor ネイティブ API (lxb_dom_node_text_content) を使用し、
  * それ以外の場合は node_walker を用いてテキストを結合する。
  */
@@ -450,7 +454,7 @@ auto inline get_first_element_by_class(lxb_dom_node_t* node, std::string_view cl
   if (element == nullptr) {
     return false;
   }
-  auto const attr = lxb_dom_element_set_attribute(element, 
+  auto const attr = lxb_dom_element_set_attribute(element,
     reinterpret_cast<lxb_char_t const*>(name.data()), name.size(),
     reinterpret_cast<lxb_char_t const*>(value.data()), value.size());
   return attr != nullptr;
@@ -460,7 +464,7 @@ auto inline get_first_element_by_class(lxb_dom_node_t* node, std::string_view cl
   if (element == nullptr) {
     return false;
   }
-  auto const status = lxb_dom_element_remove_attribute(element, 
+  auto const status = lxb_dom_element_remove_attribute(element,
     reinterpret_cast<lxb_char_t const*>(name.data()), name.size());
   return status == LXB_STATUS_OK;
 }
@@ -482,7 +486,7 @@ auto inline get_first_element_by_class(lxb_dom_node_t* node, std::string_view cl
     return true;
   }
 
-  auto* const text_node = lxb_dom_document_create_text_node(node->owner_document, 
+  auto* const text_node = lxb_dom_document_create_text_node(node->owner_document,
     reinterpret_cast<lxb_char_t const*>(text.data()), text.size());
   if (text_node == nullptr) {
     return false;
@@ -873,15 +877,11 @@ struct css_parser_deleter {
   void operator()(lxb_css_parser_t* p) const noexcept { lxb_css_parser_destroy(p, true); }
 };
 struct css_selectors_deleter {
-  void operator()(lxb_css_selector_list_t* l) const noexcept { lxb_css_selector_list_destroy(l); }
+  void operator()(lxb_css_selector_list_t* l) const noexcept { lxb_css_selector_list_destroy_memory(l); }
 };
 struct selectors_deleter {
   void operator()(lxb_selectors_t* s) const noexcept { lxb_selectors_destroy(s, true); }
 };
-
-using css_parser_ptr = std::unique_ptr<lxb_css_parser_t, css_parser_deleter>;
-using css_selector_list_ptr = std::unique_ptr<lxb_css_selector_list_t, css_selectors_deleter>;
-using selectors_ptr = std::unique_ptr<lxb_selectors_t, selectors_deleter>;
 
 inline auto serialize_callback(const lxb_char_t* data, size_t len, void* ctx) noexcept -> lxb_status_t {
   auto* const str = static_cast<std::string*>(ctx);
@@ -921,23 +921,30 @@ inline auto serialize_callback(const lxb_char_t* data, size_t len, void* ctx) no
 [[nodiscard]] auto inline query_selector(lxb_dom_node_t* node, std::string_view selector) -> lxb_dom_node_t* {
   if (node == nullptr or selector.empty()) return nullptr;
 
-  detail::css_parser_ptr parser{lxb_css_parser_create()};
-  lxb_css_parser_init(parser.get(), nullptr);
+  auto parser = lxb_css_parser_create();
+  if (parser == nullptr) { return nullptr; }
+  auto _ = std::unique_ptr<lxb_css_parser_t, detail::css_parser_deleter>{parser};
+  lxb_css_parser_init(parser, nullptr);
 
-  detail::css_selector_list_ptr list{lxb_css_selectors_parse(parser.get(), 
-    reinterpret_cast<const lxb_char_t*>(selector.data()), selector.size())};
-  if (not list) return nullptr;
+  auto list = lxb_css_selectors_parse(parser, reinterpret_cast<const lxb_char_t*>(selector.data()), selector.size());
+  if (list == nullptr) { return nullptr; }
+  auto _ = std::unique_ptr<lxb_css_selector_list_t, detail::css_selectors_deleter>{list};
 
-  detail::selectors_ptr selectors{lxb_selectors_create()};
-  lxb_selectors_init(selectors.get());
+  auto selectors = lxb_selectors_create();
+  if (selectors == nullptr) { return nullptr; }
+  auto _ = std::unique_ptr<lxb_selectors_t, detail::selectors_deleter>{selectors};
+  lxb_selectors_init(selectors);
 
   lxb_dom_node_t* result = nullptr;
-  auto const cb = [](lxb_dom_node_t* n, [[maybe_unused]] lxb_css_selector_specificity_t spec, void* ctx) -> lxb_status_t {
+  auto const cb = [](lxb_dom_node_t* n, lxb_css_selector_specificity_t, void* ctx) -> lxb_status_t {
     *static_cast<lxb_dom_node_t**>(ctx) = n;
     return LXB_STATUS_STOP;
   };
 
-  lxb_selectors_find(selectors.get(), node, list.get(), cb, &result);
+  auto const status = lxb_selectors_find(selectors, node, list, cb, &result);
+  if (status != LXB_STATUS_OK and status != LXB_STATUS_STOP) {
+    return nullptr;
+  }
   return result;
 }
 
@@ -947,15 +954,19 @@ inline auto serialize_callback(const lxb_char_t* data, size_t len, void* ctx) no
 [[nodiscard]] auto inline query_selector_all(lxb_dom_node_t* node, std::string_view selector) -> std::vector<lxb_dom_node_t*> {
   if (node == nullptr or selector.empty()) return {};
 
-  detail::css_parser_ptr parser{lxb_css_parser_create()};
-  lxb_css_parser_init(parser.get(), nullptr);
+  auto parser = lxb_css_parser_create();
+  if (parser == nullptr) { return {}; }
+  auto _ = std::unique_ptr<lxb_css_parser_t, detail::css_parser_deleter>{parser};
+  lxb_css_parser_init(parser, nullptr);
 
-  detail::css_selector_list_ptr list{lxb_css_selectors_parse(parser.get(), 
-    reinterpret_cast<const lxb_char_t*>(selector.data()), selector.size())};
-  if (not list) return {};
+  auto list = lxb_css_selectors_parse(parser, reinterpret_cast<const lxb_char_t*>(selector.data()), selector.size());
+  if (list == nullptr) { return {}; }
+  auto _ = std::unique_ptr<lxb_css_selector_list_t, detail::css_selectors_deleter>{list};
 
-  detail::selectors_ptr selectors{lxb_selectors_create()};
-  lxb_selectors_init(selectors.get());
+  auto selectors = lxb_selectors_create();
+  if (selectors == nullptr) { return {}; }
+  auto _ = std::unique_ptr<lxb_selectors_t, detail::selectors_deleter>{selectors};
+  lxb_selectors_init(selectors);
 
   std::vector<lxb_dom_node_t*> result;
   auto const cb = [](lxb_dom_node_t* n, [[maybe_unused]] lxb_css_selector_specificity_t spec, void* ctx) -> lxb_status_t {
@@ -963,7 +974,10 @@ inline auto serialize_callback(const lxb_char_t* data, size_t len, void* ctx) no
     return LXB_STATUS_OK;
   };
 
-  lxb_selectors_find(selectors.get(), node, list.get(), cb, &result);
+  auto const status = lxb_selectors_find(selectors, node, list, cb, &result);
+  if (status != LXB_STATUS_OK and status != LXB_STATUS_STOP) {
+    return {};
+  }
   return result;
 }
 

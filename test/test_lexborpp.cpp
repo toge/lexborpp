@@ -23,6 +23,7 @@ concept ranges_compatible_walker =
 static_assert(ranges_compatible_walker<lexborpp::node_walker>);
 static_assert(ranges_compatible_walker<lexborpp::node_sibling_walker>);
 static_assert(ranges_compatible_walker<lexborpp::attr_walker>);
+static_assert(ranges_compatible_walker<lexborpp::node_prev_sibling_walker>);
 
 constexpr auto kHtml = R"HTML(<!doctype html><html><body id="body"><div id="container" class="alpha beta" data-role="main"><section id="tree"><article id="branch-a"><em id="leaf-a"></em></article><article id="branch-b"><strong id="leaf-b"></strong></article></section><div id="text-only">first<!--comment-->second</div><div id="mixed"><span>ignore</span>left<b>inner</b>right</div><div id="nested-only"><span>ignore</span></div><p id="class-target" class="match target-class"></p><p id="class-second" class="match"></p><div id="attrs" class="alpha beta" data-role="main" title="Title"></div></div></body></html>)HTML";
 
@@ -379,7 +380,7 @@ TEST_CASE("get_deep_text collects all descendant text nodes") {
     auto* text_node = lxb_dom_node_first_child(node);
     REQUIRE(text_node != nullptr);
     REQUIRE(text_node->type == LXB_DOM_NODE_TYPE_TEXT);
-    
+
     REQUIRE(lexborpp::get_deep_text(text_node) == "Text");
     REQUIRE(lexborpp::get_deep_text(text_node, "|") == "Text");
   }
