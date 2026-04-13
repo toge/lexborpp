@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.25)
 project(lexborpp VERSION 0.0.1 LANGUAGES CXX)
 
+option(ENABLE_TESTS "Enable tests" ON)
+
 include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
 
@@ -95,5 +97,7 @@ install(FILES
             "${CMAKE_CURRENT_BINARY_DIR}/lexborppConfigVersion.cmake"
         DESTINATION ${LEXBORPP_INSTALL_CMAKEDIR})
 
-enable_testing()
-add_subdirectory(test)
+if(ENABLE_TESTS)
+    enable_testing()
+    add_subdirectory(test)
+endif()
