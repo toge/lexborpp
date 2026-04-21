@@ -513,3 +513,41 @@ TEST_CASE("walkers compose with std ranges adaptors") {
   REQUIRE(found != std::ranges::end(lexborpp::node_sibling_walker{first_child}));
   REQUIRE(*found == require_node(fixture, "branch-b"));
 }
+
+TEST_CASE("range adapters tag id clazz attr filter expected nodes") {
+  auto fixture = html_document_fixture{kHtml};
+  auto* body = fixture.body_node();
+  REQUIRE(body != nullptr);
+
+  SECTION("tag filters by tag id") {
+    auto ids = collect_ids(lexborpp::node_walker{body} | lexborpp::tag<LXB_TAG_ARTICLE>);
+    REQUIRE(ids == std::vector<std::string>{"branch-a", "branch-b"});
+  }
+
+  SECTION("id filters by exact id attribute") {
+    auto ids = collect_ids(lexborpp::node_walker{body} | lexborpp::id<"leaf-b">);
+    REQUIRE(ids == std::vector<std::string>{"leaf-b"});
+
+    auto missing = collect_ids(lexborpp::node_walker{body} | lexborpp::id<"missing-id">);
+    REQUIRE(missing.empty());
+  }
+
+  SECTION("clazz filters by exact class attribute string") {
+    auto exact_multi = collect_ids(lexborpp::node_walker{body} | lexborpp::clazz<"match target-class">);
+    REQUIRE(exact_multi == std::vector<std::string>{"class-target"});
+
+    auto exact_single = collect_ids(lexborpp::node_walker{body} | lexborpp::clazz<"match">);
+    REQUIRE(exact_single == std::vector<std::string>{"class-second"});
+  }
+
+  SECTION("attr filters by attribute name and value") {
+    auto role_nodes = collect_ids(lexborpp::node_walker{body} | lexborpp::attr<"data-role", "main">);
+    REQUIRE(role_nodes == std::vector<std::string>{"container", "attrs"});
+
+    auto title_nodes = collect_ids(lexborpp::node_walker{body} | lexborpp::attr<"title", "Title">);
+    REQUIRE(title_nodes == std::vector<std::string>{"attrs"});
+
+    auto none = collect_ids(lexborpp::node_walker{body} | lexborpp::attr<"data-role", "sub">);
+    REQUIRE(none.empty());
+  }
+}

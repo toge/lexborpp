@@ -981,6 +981,81 @@ inline auto serialize_callback(const lxb_char_t* data, size_t len, void* ctx) no
   return result;
 }
 
+/**
+ * @brief 指定したタグ名のノードのみを通過させる Range アダプタです。
+ *
+ * @tparam Tag 対象タグ (例: LXB_TAG_TABLE, LXB_TAG_TR)
+ *
+ * 使用例:
+ * @code
+ * lexborpp::node_walker(root) | lexborpp::tag<LXB_TAG_TABLE>
+ * @endcode
+ */
+template <lxb_tag_id_t Tag>
+inline constexpr auto tag = std::views::filter([](lxb_dom_node_t* node) { return node->local_name == Tag; });
+
+namespace detail {
+
+/**
+ * @brief 文字列を非型テンプレートパラメータとして渡すためのヘルパーです。
+ *
+ * C++20 以降、構造体は NTTP として使用できます。
+ */
+template <std::size_t N>
+struct fixed_string {
+  char data[N]{};
+  constexpr fixed_string(char const (&str)[N]) noexcept {
+    std::copy_n(str, N, data);
+  }
+  constexpr auto view() const noexcept -> std::string_view { return {data, N - 1}; }
+  constexpr auto operator==(fixed_string const&) const -> bool = default;
+};
+
+} // namespace detail
+
+/**
+ * @brief 指定した id 属性値を持つノードのみを通過させる Range アダプタです。
+ *
+ * @tparam Id 対象の id 属性値 (例: "forecast-point-3h-today")
+ *
+ * 使用例:
+ * @code
+ * lexborpp::node_walker(root) | lexborpp::id<"forecast-point-3h-today">
+ * @endcode
+ */
+template <detail::fixed_string Id>
+inline constexpr auto id = std::views::filter(
+    [](lxb_dom_node_t* node) { return lexborpp::get_attr_value(node, "id") == Id.view(); });
+
+/**
+ * @brief 指定した class 属性値を持つノードのみを通過させる Range アダプタです。
+ *
+ * @tparam Class 対象の class 属性値 (例: "section-wrap")
+ *
+ * 使用例:
+ * @code
+ * lexborpp::node_walker(root) | lexborpp::clazz<"section-wrap">
+ * @endcode
+ */
+template <detail::fixed_string Class>
+inline constexpr auto clazz = std::views::filter(
+    [](lxb_dom_node_t* node) { return lexborpp::get_attr_value(node, "class") == Class.view(); });
+
+/**
+ * @brief 指定した属性名・属性値を持つノードのみを通過させる Range アダプタです。
+ *
+ * @tparam Attr 属性名 (例: "class")
+ * @tparam Value 属性値 (例: "section-wrap")
+ *
+ * 使用例:
+ * @code
+ * lexborpp::node_walker(root) | lexborpp::attr<"class", "section-wrap">
+ * @endcode
+ */
+template <detail::fixed_string Attr, detail::fixed_string Value>
+inline constexpr auto attr = std::views::filter(
+    [](lxb_dom_node_t* node) { return lexborpp::get_attr_value(node, Attr.view()) == Value.view(); });
+
 } // namespace lexborpp
 
 namespace std::ranges {
