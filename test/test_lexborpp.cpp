@@ -1,3 +1,4 @@
+#include <array>
 #include <concepts>
 #include <ranges>
 #include "catch2/catch_all.hpp"
@@ -522,6 +523,12 @@ TEST_CASE("range adapters tag id clazz attr filter expected nodes") {
   SECTION("tag filters by tag id") {
     auto ids = collect_ids(lexborpp::node_walker{body} | lexborpp::tag<LXB_TAG_ARTICLE>);
     REQUIRE(ids == std::vector<std::string>{"branch-a", "branch-b"});
+  }
+
+  SECTION("tag ignores nullptr entries in arbitrary pointer ranges") {
+    auto const nodes = std::array<lxb_dom_node_t*, 3>{nullptr, body, nullptr};
+    auto ids = collect_ids(nodes | lexborpp::tag<LXB_TAG_BODY>);
+    REQUIRE(ids == std::vector<std::string>{"body"});
   }
 
   SECTION("id filters by exact id attribute") {

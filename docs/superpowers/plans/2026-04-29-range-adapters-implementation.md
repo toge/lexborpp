@@ -17,8 +17,8 @@
   - Harden the `tag` / `id` / `clazz` / `attr` predicates in the existing range adapter block
 - Modify: `test/test_lexborpp.cpp`
   - Extend the existing range adapter test area with one regression that proves `tag` ignores `nullptr` inputs instead of dereferencing them
-- Reuse: `build.sh`, `test.sh`
-  - Keep the existing configure/build/test workflow
+- Reuse: `README.md`
+  - Follow the tracked configure/build/test workflow documented in the repository
 
 ### Task 1: Add a focused failing regression
 
@@ -31,7 +31,11 @@
 Run:
 
 ```bash
-./build.sh
+cmake -B build \
+  -S . \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_TOOLCHAIN_FILE="${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake" && \
+cmake --build build --parallel
 ```
 
 Expected: CMake configure and build complete successfully, producing `./build/test/all_test`
@@ -115,7 +119,12 @@ Expected: PASS
 Run:
 
 ```bash
-./build.sh && ./test.sh
+cmake -B build \
+  -S . \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_TOOLCHAIN_FILE="${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake" && \
+cmake --build build --parallel && \
+ctest --test-dir build -V
 ```
 
 Expected: build succeeds and the existing test suite stays green
