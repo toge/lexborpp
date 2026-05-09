@@ -525,6 +525,11 @@ TEST_CASE("range adapters tag id clazz attr filter expected nodes") {
     REQUIRE(ids == std::vector<std::string>{"branch-a", "branch-b"});
   }
 
+  SECTION("tag accepts multiple tag ids with any-match semantics") {
+    auto ids = collect_ids(lexborpp::node_walker{body} | lexborpp::tag<LXB_TAG_ARTICLE, LXB_TAG_P>);
+    REQUIRE(ids == std::vector<std::string>{"branch-a", "branch-b", "class-target", "class-second"});
+  }
+
   SECTION("tag ignores nullptr entries in arbitrary pointer ranges") {
     auto const nodes = std::array<lxb_dom_node_t*, 3>{nullptr, body, nullptr};
     auto ids = collect_ids(nodes | lexborpp::tag<LXB_TAG_BODY>);
@@ -545,6 +550,12 @@ TEST_CASE("range adapters tag id clazz attr filter expected nodes") {
 
     auto exact_single = collect_ids(lexborpp::node_walker{body} | lexborpp::clazz<"match">);
     REQUIRE(exact_single == std::vector<std::string>{"class-second"});
+  }
+
+  SECTION("clazz accepts multiple class strings with any-match semantics") {
+    auto ids =
+        collect_ids(lexborpp::node_walker{body} | lexborpp::clazz<"match target-class", "match">);
+    REQUIRE(ids == std::vector<std::string>{"class-target", "class-second"});
   }
 
   SECTION("attr filters by attribute name and value") {
