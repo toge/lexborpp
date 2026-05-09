@@ -1,23 +1,27 @@
 # lexborpp
 
-`lexborpp` は、[Lexbor](https://github.com/lexbor/lexbor) の HTML / DOM API を C++ から扱いやすくするための軽量なヘッダオンリーラッパーです。
+`lexborpp` は、[Lexbor](https://github.com/lexbor/lexbor) の HTML / DOM / CSS Selectors API を C++ から扱いやすくするための軽量なヘッダオンリーラッパーです。
 
-このリポジトリでは、Lexbor が持つ高速な HTML パーサと DOM ツリー操作をそのまま活かしつつ、`std::string_view`、`std::optional`、`std::ranges` を使って次のような処理を簡潔に書けます。
+生の `lxb_dom_node_t*` をそのまま扱いながら、`std::expected`、`std::optional`、`std::ranges` を使って次のような処理を短く書けます。
 
-- ID や class によるノード検索
-- 属性値や直下テキストの取得
-- 子孫ノード・兄弟ノード・属性列挙の range 走査
-- Lexbor の DOM ノードを C++ の ranges アダプタと組み合わせた処理
+- RAII で HTML ドキュメントを所有する
+- ID / class / CSS selector でノードを探す
+- 属性・テキスト・HTML 文字列を取り出す
+- DOM をその場で編集する
+- Lexbor のノード列を ranges / views と組み合わせて絞り込む
 
-Lexbor 自体は C 製の高速・標準準拠な HTML パーサで、HTML / DOM / CSS / URL などをモジュール単位で提供しています。`lexborpp` はそのうち、このリポジトリで利用している HTML / DOM 操作を C++ 向けに薄く包むことを目的にしています。
+Lexbor 自体は C 製の高速な HTML パーサです。公式ドキュメントでも HTML パースと CSS Selectors モジュールが公開されており、`lexborpp` はその上に薄い C++ API を重ねています。
 
 ## 特徴
 
 - ヘッダオンリーライブラリ
-- `Lexbor` の DOM ノードをそのまま扱える
-- `get_element_by_id`、`get_first_element_by_class`、`get_attr_value` などの小さな補助関数を提供
-- `node_walker`、`node_sibling_walker`、`attr_walker` が `std::ranges` の view として使える
-- CMake から `INTERFACE` ライブラリとして利用できる
+- `lexborpp::document_ptr` と `parse_html()` による RAII ベースのパース
+- `query_selector()` / `query_selector_all()` による CSS selector 検索
+- `set_attr()` / `remove_attr()` / `set_text_content()` による DOM 編集
+- `outer_html()` / `inner_html()` / `get_deep_text()` によるシリアライズ補助
+- `node_walker` / `node_sibling_walker` / `node_prev_sibling_walker` / `attr_walker`
+- `tag` / `id` / `clazz` / `attr` の range アダプタ
+- CMake から `lexborpp::lexborpp` として利用可能
 
 ## 必要環境
 
@@ -26,20 +30,14 @@ Lexbor 自体は C 製の高速・標準準拠な HTML パーサで、HTML / DOM
   - `CMakeLists.txt` では C++26 を優先し、未対応なら C++23 を使います
 - [Lexbor](https://github.com/lexbor/lexbor)
 
-テストを実行する場合は、追加で以下が必要です。
-
-- Catch2
-
-このリポジトリの `vcpkg.json` には次の依存関係が含まれています。
+テストを実行する場合は追加で Catch2 が必要です。リポジトリの `vcpkg.json` には次の依存関係が入っています。
 
 - `lexbor`
 - `catch2`
 
 ## 導入方法
 
-### 1. このリポジトリを依存として取り込む
-
-既存の CMake プロジェクトに `add_subdirectory` で取り込むのが一番簡単です。
+### 1. `add_subdirectory` で取り込む
 
 ```cmake
 add_subdirectory(external/lexborpp)
@@ -50,13 +48,9 @@ target_link_libraries(your_target
 )
 ```
 
-`lexborpp` 自体はヘッダオンリーですが、内部で `lexbor::lexbor` にリンクします。そのため、事前に Lexbor を CMake から見つけられる状態にしてください。
+`lexborpp` はヘッダオンリーですが、内部では Lexbor にリンクします。`find_package(lexbor CONFIG REQUIRED)` できる環境、または Lexbor のヘッダ / ライブラリを CMake が見つけられる環境が必要です。
 
-### 2. vcpkg を使って依存関係を解決する
-
-このリポジトリには `vcpkg.json` があるため、vcpkg を使う場合は Lexbor と Catch2 をまとめて解決できます。
-
-たとえば configure 時に vcpkg のツールチェーンを指定します。
+### 2. vcpkg manifest mode で configure / build する
 
 ```bash
 cmake -B build \
@@ -66,11 +60,27 @@ cmake -B build \
 cmake --build build --parallel
 ```
 
-リポジトリ付属の `build.sh` も、vcpkg ツールチェーンを使って `build/` を構成してからビルドする前提になっています。
+付属の `build.sh` でも configure と build をまとめて実行できます。
+
+```bash
+./build.sh
+```
+
+静的リンク向けの `build_static/` を作る場合は次です。
+
+```bash
+./build.sh static
+```
 
 ### 3. インストールして `find_package` で使う
 
-このプロジェクトは CMake package config をインストールできるようになっています。インストール後は、利用側で次のように参照できます。
+このプロジェクトは CMake package config をインストールできます。
+
+```bash
+cmake --install build --prefix /absolute/path/to/install
+```
+
+利用側では次のように参照できます。
 
 ```cmake
 find_package(lexborpp CONFIG REQUIRED)
@@ -81,79 +91,54 @@ target_link_libraries(your_target
 )
 ```
 
-## 最小の使用例
+## 使用例
 
-以下は、HTML を Lexbor でパースし、`lexborpp` の補助関数と walker を使って情報を取り出す例です。
+### HTML をパースして CSS selector で取得する
 
 ```cpp
 #include <cstdlib>
 #include <iostream>
-#include <ranges>
 
-#include <lexbor/html/html.h>
-#include "lexborpp.hpp"
+#include <lexborpp.hpp>
 
-int main() {
-  using namespace lexborpp;
-
-  char constexpr html[] = R"HTML(
+auto main() -> int {
+  auto constexpr html = R"HTML(
 <!doctype html>
-<html>
-  <body>
-    <div id="content" class="entry" data-role="main">Hello<span>world</span></div>
-  </body>
-</html>
+<div id="root">
+  <ul class="items">
+    <li id="a" class="item">first</li>
+    <li id="b" class="item featured">second <b>item</b></li>
+  </ul>
+</div>
 )HTML";
 
-  auto* document = lxb_html_document_create();
-  if (document == nullptr) {
-    std::cerr << "failed to create document\n";
-    return EXIT_FAILURE;
-  }
-
-  auto const cleanup = [&]() {
-    lxb_html_document_destroy(document);
-  };
-
-  auto const status = lxb_html_document_parse(
-      document,
-      reinterpret_cast<lxb_char_t const*>(html),
-      sizeof(html) - 1);
-  if (status != LXB_STATUS_OK) {
+  auto doc_expected = lexborpp::parse_html(html);
+  if (!doc_expected.has_value()) {
     std::cerr << "failed to parse html\n";
-    cleanup();
     return EXIT_FAILURE;
   }
 
-  auto* root = lxb_dom_interface_node(document);
-  auto* content = get_element_by_id(root, "content");
-  if (content == nullptr) {
+  auto* root = lexborpp::get_root(doc_expected.value());
+  auto* featured = lexborpp::query_selector(root, "li.featured");
+  if (featured == nullptr) {
     std::cerr << "element not found\n";
-    cleanup();
     return EXIT_FAILURE;
   }
 
-  if (auto const role = get_attr_value(content, "data-role"); role.has_value()) {
-    std::cout << "data-role: " << *role << '\n';
+  if (!lexborpp::set_attr(lexborpp::as_element(featured), "data-state", "ready")) {
+    std::cerr << "failed to set attribute\n";
+    return EXIT_FAILURE;
   }
 
-  if (auto const text = get_all_children_text(content, "|"); text.has_value()) {
-    std::cout << "direct text: " << *text << '\n';
-  }
+  std::cout << "text: " << lexborpp::get_deep_text(featured) << '\n';
+  std::cout << "html: " << lexborpp::outer_html(featured) << '\n';
 
-  for (auto* node : node_walker{content}
-                     | std::views::filter([](lxb_dom_node_t* node) noexcept {
-                         return !is_non_element_node(node);
-                       })) {
-    auto const id = get_attr_value(node, "id");
-    std::cout << "tag=" << tag_name(lxb_dom_node_tag_id(node));
-    if (id.has_value()) {
-      std::cout << " id=" << *id;
+  for (auto* node : lexborpp::query_selector_all(root, "li.item")) {
+    if (auto const id = lexborpp::get_attr_value(node, "id"); id.has_value()) {
+      std::cout << "id=" << *id << '\n';
     }
-    std::cout << '\n';
   }
 
-  cleanup();
   return EXIT_SUCCESS;
 }
 ```
@@ -161,47 +146,99 @@ int main() {
 出力イメージ:
 
 ```text
-data-role: main
-direct text: Hello
-tag=SPAN
+text: second item
+html: <li id="b" class="item featured" data-state="ready">second <b>item</b></li>
+id=a
+id=b
 ```
 
-`node_walker{content}` は開始ノード自身ではなく、その子孫ノードを深さ優先で走査します。上の例では `<div id="content">` の内側にある `<span>` が列挙されます。
+### ranges と組み合わせてノードを絞り込む
 
-## 利用できる主な補助機能
+`node_walker` は開始ノード自身ではなく、その子孫を深さ優先で列挙します。
 
-README では実用上よく使うものだけを挙げます。
+```cpp
+#include <iostream>
+#include <ranges>
 
-- `get_element_by_id(node, id)`
-  - 指定ノード以下から `id` が一致する最初の要素を探します
-- `get_first_element_by_class(node, class_name)`
-  - `class` 属性文字列が完全一致する最初の要素を返します
-- `get_attr_value(node, attr_name)`
-  - 属性値を `std::optional<std::string_view>` で返します
-- `get_first_child_text(node)`
-  - 直下の最初のテキストノードを返します
-- `get_all_children_text(node[, sep])`
-  - 直下のテキストノードを連結して返します
-- `node_walker`
-  - 子孫ノードを深さ優先で列挙します
-- `node_sibling_walker`
-  - 指定ノードから後続兄弟を順に列挙します
-- `attr_walker`
-  - 属性を range として列挙します
-- `tag_name(tag_id)`
-  - Lexbor のタグ ID を文字列化します
+#include <lexborpp.hpp>
+
+auto dump_ready_items(lxb_dom_node_t* root) -> void {
+  for (auto* node : lexborpp::node_walker{root}
+                     | lexborpp::tag<LXB_TAG_LI>
+                     | lexborpp::attr<"data-state", "ready">) {
+    std::cout << lexborpp::get_deep_text(node) << '\n';
+  }
+}
+```
+
+## 主な API
+
+### ドキュメント管理
+
+| API | 説明 |
+| --- | --- |
+| `document_ptr` | `lxb_html_document_t*` を RAII で保持する `std::unique_ptr` エイリアス |
+| `parse_html(html)` | `std::expected<document_ptr, lxb_status_t>` を返す |
+| `get_root(doc)` | ドキュメントのルートノードを返す |
+
+### 検索
+
+| API | 説明 |
+| --- | --- |
+| `get_element_by_id(node, id)` | 子孫を走査して最初に一致した `id` を返す |
+| `has_class(node, class_name)` | `class` 属性を空白区切りトークンとして判定する |
+| `has_class(node, {"a", "b"})` | 指定したすべての class を持つか判定する |
+| `get_first_element_by_class(node, class_name)` | `class` 属性文字列が**完全一致**する最初の要素を返す |
+| `get_elements_by_class(node, class_name)` | class トークンが一致する全要素を返す |
+| `query_selector(node, selector)` | CSS selector に一致する最初の要素を返す |
+| `query_selector_all(node, selector)` | CSS selector に一致する全要素を返す |
+
+### 属性・テキスト・シリアライズ
+
+| API | 説明 |
+| --- | --- |
+| `get_attr_value(node, name)` | 属性値を `std::optional<std::string_view>` で返す |
+| `get_first_child_text(node)` | 直下の最初のテキストノードを返す |
+| `get_all_children_text(node[, sep])` | 直下のテキストノードだけを連結して返す |
+| `get_deep_text(node[, sep])` | 子孫全体のテキストを返す |
+| `to_string(node)` | テキストノードなら文字列を返す |
+| `to_name_string(attr)` | 属性名を返す |
+| `to_string(attr)` | 属性値を返す |
+| `outer_html(node)` | ノード自身を含む HTML を返す |
+| `inner_html(node)` | 子ノードだけをシリアライズする |
+| `tag_name(tag_id)` | Lexbor のタグ ID を文字列化する |
+
+### DOM 編集
+
+| API | 説明 |
+| --- | --- |
+| `as_element(node)` | `lxb_dom_node_t*` を `lxb_dom_element_t*` に変換する |
+| `set_attr(element, name, value)` | 属性を追加 / 更新する |
+| `remove_attr(element, name)` | 属性を削除する |
+| `set_text_content(node, text)` | 既存の子ノードを消してテキストノードへ置き換える |
+
+### Walker / range アダプタ
+
+| API | 説明 |
+| --- | --- |
+| `node_walker{node}` | 子孫ノードを深さ優先で列挙する |
+| `node_sibling_walker{node}` | 指定ノード自身から後続兄弟を列挙する |
+| `node_prev_sibling_walker{node}` | 指定ノードの直前兄弟から逆方向に列挙する |
+| `attr_walker{node}` | 要素の属性を列挙する |
+| `attr_walker{attr}` | 指定属性から後続属性を列挙する |
+| `tag<LXB_TAG_...>` | タグ ID で絞り込む |
+| `id<"...">` | `id` 属性の完全一致で絞り込む |
+| `clazz<"...">` | `class` 属性文字列の完全一致で絞り込む |
+| `attr<"name", "value">` | 属性名と属性値の完全一致で絞り込む |
 
 ## テスト
 
-このリポジトリでは Catch2 と CTest を使っています。
-
-すでに `build/` が構成済みであれば、次でテストできます。
-
 ```bash
+./build.sh
 ./test.sh
 ```
 
-手動で configure / build / test する場合は次のようになります。
+手動で configure / build / test する場合は次です。
 
 ```bash
 cmake -B build \
@@ -212,23 +249,32 @@ cmake --build build --parallel
 ctest --test-dir build -V
 ```
 
-## 収録ファイル
+特定のケースだけ確認したい場合は次も使えます。
 
-- `include/lexborpp.hpp`
-  - 公開ヘッダ。補助関数と range ベース walker を定義します
-- `test/test_lexborpp.cpp`
-  - 主要 API の使い方と期待動作を示すテスト群です
-- `test/test_support.hpp`
-  - Lexbor ドキュメント生成と破棄をまとめたテスト用補助です
+```bash
+./build/test/all_test "range adapters tag id clazz attr filter expected nodes"
+```
 
 ## 注意点
 
-- `get_first_element_by_class` は class 名の単語分割ではなく、`class` 属性文字列との完全一致で判定します
-- `get_all_children_text` / `get_first_child_text` は直下のテキストノードのみを対象にし、孫要素以下のテキストは含みません
-- walker は Lexbor の生ポインタをそのまま扱うため、元の `lxb_html_document_t` の寿命が切れた後に使ってはいけません
+- `has_class()` と `get_elements_by_class()` は `class="alpha beta"` をトークン分割して判定します
+- `get_first_element_by_class()` と `clazz<"...">` は `class` 属性文字列の完全一致です
+- `get_first_child_text()` / `get_all_children_text()` は直下のテキストノードだけを対象にします
+- `get_deep_text()` は子孫全体のテキストを対象にします
+- `query_selector()` は無効な selector や初期化失敗時に `nullptr` を返し、`query_selector_all()` は空配列を返します
+- walker / range アダプタは Lexbor の生ポインタをそのまま返すため、元の `lxb_html_document_t` の寿命内でだけ使ってください
+
+## 収録ファイル
+
+- `include/lexborpp.hpp`
+  - 公開 API 本体です
+- `cmake/lexborppConfig.cmake.in`
+  - `find_package(lexborpp CONFIG REQUIRED)` 用の package config テンプレートです
+- `build.sh`
+  - vcpkg ツールチェーン前提で configure / build します
+- `test/test_lexborpp.cpp`
+  - 公開 API の期待動作を網羅する Catch2 テストです
 
 ## ライセンス
 
-MITライセンスで提供します。
-詳細は `LICENSE` ファイルを参照してください。
-
+MIT ライセンスで提供します。詳細は `LICENSE` を参照してください。
