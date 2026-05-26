@@ -289,6 +289,12 @@ TEST_CASE("lexborpp lookup helpers find expected nodes") {
   REQUIRE(alpha_matches[0] == container);
   REQUIRE(alpha_matches[1] == attrs_node);
 
+  // Verifying that the search includes the root node itself
+  auto const container_alpha = lexborpp::get_elements_by_class(container, "alpha");
+  REQUIRE(container_alpha.size() == 2);
+  REQUIRE(container_alpha[0] == container);
+  REQUIRE(container_alpha[1] == require_node(fixture, "attrs"));
+
   auto const missing_matches = lexborpp::get_elements_by_class(document, "non-existent");
   REQUIRE(missing_matches.empty());
 
@@ -443,7 +449,7 @@ TEST_CASE("node_walker traverses descendants depth first") {
 
   auto* tree = require_node(fixture, "tree");
   REQUIRE(collect_ids(lexborpp::node_walker{tree}) ==
-          std::vector<std::string>{"branch-a", "leaf-a", "branch-b", "leaf-b"});
+          std::vector<std::string>{"tree", "branch-a", "leaf-a", "branch-b", "leaf-b"});
   REQUIRE(collect_ids(lexborpp::node_walker{}) == std::vector<std::string>{});
 }
 

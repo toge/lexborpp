@@ -154,7 +154,7 @@ id=b
 
 ### ranges と組み合わせてノードを絞り込む
 
-`node_walker` は開始ノード自身ではなく、その子孫を深さ優先で列挙します。
+`node_walker` は開始ノード自身を含め、その子孫を深さ優先で列挙します。
 
 ```cpp
 #include <iostream>
@@ -185,11 +185,11 @@ auto dump_ready_items(lxb_dom_node_t* root) -> void {
 
 | API | 説明 |
 | --- | --- |
-| `get_element_by_id(node, id)` | 子孫を走査して最初に一致した `id` を返す |
+| `get_element_by_id(node, id)` | 開始ノードと子孫を走査して最初に一致した `id` を返す |
 | `has_class(node, class_name)` | `class` 属性を空白区切りトークンとして判定する |
 | `has_class(node, {"a", "b"})` | 指定したすべての class を持つか判定する |
 | `get_first_element_by_class(node, class_name)` | `class` 属性文字列が**完全一致**する最初の要素を返す |
-| `get_elements_by_class(node, class_name)` | class トークンが一致する全要素を返す |
+| `get_elements_by_class(node, class_name)` | 開始ノードを含め、class トークンが一致する全要素を返す |
 | `query_selector(node, selector)` | CSS selector に一致する最初の要素を返す |
 | `query_selector_all(node, selector)` | CSS selector に一致する全要素を返す |
 
@@ -206,13 +206,13 @@ auto dump_ready_items(lxb_dom_node_t* root) -> void {
 | `to_string(attr)` | 属性値を返す |
 | `outer_html(node)` | ノード自身を含む HTML を返す |
 | `inner_html(node)` | 子ノードだけをシリアライズする |
-| `tag_name(tag_id)` | Lexbor のタグ ID を文字列化する |
+| `tag_name(tag_id)` | Lexbor のタグ ID を大文字の代表名（`DIV`, `TEXT`等）で返す |
 
 ### DOM 編集
 
 | API | 説明 |
 | --- | --- |
-| `as_element(node)` | `lxb_dom_node_t*` を `lxb_dom_element_t*` に変換する |
+| `as_element(node)` | `lxb_dom_node_t const*` を `lxb_dom_element_t*` に変換する |
 | `set_attr(element, name, value)` | 属性を追加 / 更新する |
 | `remove_attr(element, name)` | 属性を削除する |
 | `set_text_content(node, text)` | 既存の子ノードを消してテキストノードへ置き換える |
@@ -221,7 +221,7 @@ auto dump_ready_items(lxb_dom_node_t* root) -> void {
 
 | API | 説明 |
 | --- | --- |
-| `node_walker{node}` | 子孫ノードを深さ優先で列挙する |
+| `node_walker{node}` | 開始ノードを含め、子孫ノードを深さ優先で列挙する |
 | `node_sibling_walker{node}` | 指定ノード自身から後続兄弟を列挙する |
 | `node_prev_sibling_walker{node}` | 指定ノードの直前兄弟から逆方向に列挙する |
 | `attr_walker{node}` | 要素の属性を列挙する |
