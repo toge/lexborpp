@@ -23,43 +23,43 @@ namespace lexborpp {
 
 // --- Forward Declarations & Helpers ---
 
-auto inline to_string(lxb_dom_node_t* node) noexcept {
+auto inline to_string(lxb_dom_node_t const* node) noexcept {
   if (node == nullptr || node->type != LXB_DOM_NODE_TYPE_TEXT) {
     return std::string_view{};
   }
-  auto const data = lxb_dom_interface_character_data(node);
+  auto const data = lxb_dom_interface_character_data(const_cast<lxb_dom_node_t*>(node));
   return std::string_view{reinterpret_cast<const char*>(data->data.data), data->data.length};
 }
 
-auto inline to_name_string(lxb_dom_attr_t* attr) noexcept {
+auto inline to_name_string(lxb_dom_attr_t const* attr) noexcept {
   if (attr == nullptr) {
     return std::string_view{};
   }
   auto attr_val_len  = size_t{};
-  auto attr_val_data = lxb_dom_attr_qualified_name(attr, &attr_val_len);
+  auto attr_val_data = lxb_dom_attr_qualified_name(const_cast<lxb_dom_attr_t*>(attr), &attr_val_len);
   if (attr_val_data == nullptr) {
     return std::string_view{};
   }
   return std::string_view{reinterpret_cast<const char*>(attr_val_data), attr_val_len};
 }
 
-auto inline to_string(lxb_dom_attr_t* attr) noexcept {
+auto inline to_string(lxb_dom_attr_t const* attr) noexcept {
   if (attr == nullptr) {
     return std::string_view{};
   }
   auto attr_val_len  = size_t{};
-  auto attr_val_data = lxb_dom_attr_value(attr, &attr_val_len);
+  auto attr_val_data = lxb_dom_attr_value(const_cast<lxb_dom_attr_t*>(attr), &attr_val_len);
   if (attr_val_data == nullptr) {
     return std::string_view{};
   }
   return std::string_view{reinterpret_cast<const char*>(attr_val_data), attr_val_len};
 }
 
-auto constexpr inline is_non_element_node(lxb_dom_node_t* node) noexcept -> bool {
+auto constexpr inline is_non_element_node(lxb_dom_node_t const* node) noexcept -> bool {
   if (node == nullptr) {
     return true;
   }
-  auto const tag_id = lxb_dom_node_tag_id(node);
+  auto const tag_id = lxb_dom_node_tag_id(const_cast<lxb_dom_node_t*>(node));
   return tag_id == LXB_TAG__UNDEF || tag_id == LXB_TAG__TEXT || tag_id == LXB_TAG__DOCUMENT ||
          tag_id == LXB_TAG__EM_COMMENT || tag_id == LXB_TAG__EM_DOCTYPE;
 }
@@ -67,11 +67,11 @@ auto constexpr inline is_non_element_node(lxb_dom_node_t* node) noexcept -> bool
 /**
  * @brief ノードを要素型に変換する（キャスト）
  */
-[[nodiscard]] auto constexpr inline as_element(lxb_dom_node_t* node) noexcept -> lxb_dom_element_t* {
+[[nodiscard]] auto constexpr inline as_element(lxb_dom_node_t const* node) noexcept -> lxb_dom_element_t* {
   if (node == nullptr) {
     return nullptr;
   }
-  return lxb_dom_interface_element(node);
+  return lxb_dom_interface_element(const_cast<lxb_dom_node_t*>(node));
 }
 
 // --- Walkers ---
@@ -130,8 +130,8 @@ public:
     lxb_dom_node_t* current;
   };
 
-  [[nodiscard]] iterator begin() noexcept { return iterator{start, start ? start->first_child : nullptr}; }
-  [[nodiscard]] iterator begin() const noexcept { return iterator{start, start ? start->first_child : nullptr}; }
+  [[nodiscard]] iterator begin() noexcept { return iterator{start, start}; }
+  [[nodiscard]] iterator begin() const noexcept { return iterator{start, start}; }
   [[nodiscard]] iterator end() noexcept { return iterator{start, nullptr}; }
   [[nodiscard]] iterator end() const noexcept { return iterator{start, nullptr}; }
 
@@ -294,8 +294,8 @@ private:
  * @return bool 指定されたクラスを持っている場合はtrue、そうでない場合はfalse
  * @note class属性が空白区切りのリストであることに対応している。
  */
-[[nodiscard]] constexpr auto inline has_class(lxb_dom_node_t const* node, std::string_view class_name) noexcept -> bool {
-  if (node == nullptr or class_name.empty() or is_non_element_node(const_cast<lxb_dom_node_t*>(node))) {
+[[nodiscard]] auto inline has_class(lxb_dom_node_t const* node, std::string_view class_name) noexcept -> bool {
+  if (node == nullptr or class_name.empty() or is_non_element_node(node)) {
     return false;
   }
 
@@ -309,8 +309,7 @@ private:
   auto const attr_view = std::string_view{reinterpret_cast<const char*>(attr), attr_len};
   auto constexpr delimiters = std::string_view{" \t\n\r\f"};
 
-  auto start = attr_view.find_first_not_of(delimiters);
-  while (start != std::string_view::npos) {
+  for (auto start = attr_view.find_first_not_of(delimiters); start != std::string_view::npos; ) {
     auto const end = attr_view.find_first_of(delimiters, start);
     if (attr_view.substr(start, end - start) == class_name) {
       return true;
@@ -320,6 +319,7 @@ private:
 
   return false;
 }
+
 
 /**
  * @brief ノードが指定されたすべてのクラスを持っているか確認する。
