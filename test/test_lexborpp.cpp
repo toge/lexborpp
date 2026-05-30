@@ -154,6 +154,9 @@ TEST_CASE("lexborpp CSS selector and manipulation functions") {
     REQUIRE(lexborpp::query_selector(root, "non-existent") == nullptr);
     REQUIRE(lexborpp::query_selector(root, "invalid[@selector") == nullptr);
     REQUIRE(lexborpp::query_selector(nullptr, "div") == nullptr);
+
+    auto* self = lexborpp::query_selector(content, "div#content");
+    REQUIRE(self == content);
   }
 
   SECTION("CSS selectors (query_selector_all)") {
@@ -163,6 +166,12 @@ TEST_CASE("lexborpp CSS selector and manipulation functions") {
     REQUIRE(lexborpp::get_deep_text(ps[1]) == "Second");
 
     REQUIRE(lexborpp::query_selector_all(root, "h1").empty());
+
+    auto* content = lexborpp::query_selector(root, "#content");
+    REQUIRE(content != nullptr);
+    auto self = lexborpp::query_selector_all(content, "div#content");
+    REQUIRE(self.size() == 1);
+    REQUIRE(self[0] == content);
   }
 
   SECTION("CSS selectors (compile-time query_selector)") {
@@ -181,6 +190,9 @@ TEST_CASE("lexborpp CSS selector and manipulation functions") {
     REQUIRE(second != nullptr);
     REQUIRE(lexborpp::get_deep_text(second) == "Second");
 
+    auto* self = lexborpp::query_selector<"div#content">(content);
+    REQUIRE(self == content);
+
     REQUIRE(lexborpp::query_selector<"non-existent">(root) == nullptr);
   }
 
@@ -195,6 +207,12 @@ TEST_CASE("lexborpp CSS selector and manipulation functions") {
     REQUIRE(lexborpp::get_deep_text(grouped[0]) == "First");
     REQUIRE(lexborpp::get_deep_text(grouped[1]) == "Second");
     REQUIRE(lexborpp::get_deep_text(grouped[2]) == "Bold");
+
+    auto* content = lexborpp::query_selector(root, "#content");
+    REQUIRE(content != nullptr);
+    auto self = lexborpp::query_selector_all<"div#content">(content);
+    REQUIRE(self.size() == 1);
+    REQUIRE(self[0] == content);
   }
 
   SECTION("DOM manipulation (attributes)") {

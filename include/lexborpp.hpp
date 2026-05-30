@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstdint>
 #include <expected>
 #include <functional>
 #include <initializer_list>
@@ -12,6 +13,7 @@
 #include <ranges>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <vector>
 
 #include "lexbor/html/parser.h"
@@ -565,15 +567,41 @@ auto inline get_attr_value(lxb_dom_node_t* node, std::string_view attr_name) noe
     return std::nullopt;
   }
 
-  for (auto p = lxb_dom_element_first_attribute(lxb_dom_interface_element(node)); p != nullptr; p = lxb_dom_element_next_attribute(p)) {
-    auto       attr_name_len  = size_t{};
+  auto* const element = lxb_dom_interface_element(node);
+  auto attr_val_len = size_t{};
+
+  if (attr_name == "id") {
+    auto const attr_val_data = lxb_dom_element_id(element, &attr_val_len);
+    if (attr_val_data != nullptr) {
+      return std::string_view{reinterpret_cast<const char*>(attr_val_data), attr_val_len};
+    }
+    return std::nullopt;
+  }
+
+  if (attr_name == "class") {
+    auto const attr_val_data = lxb_dom_element_class(element, &attr_val_len);
+    if (attr_val_data != nullptr) {
+      return std::string_view{reinterpret_cast<const char*>(attr_val_data), attr_val_len};
+    }
+    return std::nullopt;
+  }
+
+  auto* attr = lxb_dom_element_attr_by_name(element, reinterpret_cast<lxb_char_t const*>(attr_name.data()), attr_name.size());
+  if (attr != nullptr) {
+    auto const attr_val_data = lxb_dom_attr_value(attr, &attr_val_len);
+    if (attr_val_data != nullptr) {
+      return std::string_view{reinterpret_cast<const char*>(attr_val_data), attr_val_len};
+    }
+  }
+
+  for (auto* p = lxb_dom_element_first_attribute(element); p != nullptr; p = lxb_dom_element_next_attribute(p)) {
+    auto attr_name_len = size_t{};
     auto const attr_name_data = lxb_dom_attr_qualified_name(p, &attr_name_len);
     if (attr_name_data == nullptr or std::string_view{reinterpret_cast<const char*>(attr_name_data), attr_name_len} != attr_name) {
       continue;
     }
 
-    auto attr_val_len  = size_t{};
-    auto attr_val_data = lxb_dom_attr_value(p, &attr_val_len);
+    auto const attr_val_data = lxb_dom_attr_value(p, &attr_val_len);
     if (attr_val_data != nullptr) {
       return std::string_view{reinterpret_cast<const char*>(attr_val_data), attr_val_len};
     }
@@ -921,21 +949,35 @@ inline auto serialize_callback(const lxb_char_t* data, size_t len, void* ctx) no
  * @brief CSS セレクタにマッチする最初の要素を返す
  */
 [[nodiscard]] auto inline query_selector(lxb_dom_node_t* node, std::string_view selector) -> lxb_dom_node_t* {
-  if (node == nullptr or selector.empty()) return nullptr;
+  if (node == nullptr or selector.empty()) {
+    return nullptr;
+  }
 
   auto parser = lxb_css_parser_create();
-  if (parser == nullptr) { return nullptr; }
-  auto _ = std::unique_ptr<lxb_css_parser_t, detail::css_parser_deleter>{parser};
-  lxb_css_parser_init(parser, nullptr);
+  if (parser == nullptr) {
+    return nullptr;
+  }
+  [[maybe_unused]] auto parser_guard = std::unique_ptr<lxb_css_parser_t, detail::css_parser_deleter>{parser};
+  if (lxb_css_parser_init(parser, nullptr) != LXB_STATUS_OK) {
+    return nullptr;
+  }
+  std::ignore = lxb_css_parser_selectors_init(parser);
 
   auto list = lxb_css_selectors_parse(parser, reinterpret_cast<const lxb_char_t*>(selector.data()), selector.size());
-  if (list == nullptr) { return nullptr; }
-  auto _ = std::unique_ptr<lxb_css_selector_list_t, detail::css_selectors_deleter>{list};
+  if (list == nullptr) {
+    return nullptr;
+  }
+  [[maybe_unused]] auto list_guard = std::unique_ptr<lxb_css_selector_list_t, detail::css_selectors_deleter>{list};
 
   auto selectors = lxb_selectors_create();
-  if (selectors == nullptr) { return nullptr; }
-  auto _ = std::unique_ptr<lxb_selectors_t, detail::selectors_deleter>{selectors};
-  lxb_selectors_init(selectors);
+  if (selectors == nullptr) {
+    return nullptr;
+  }
+  [[maybe_unused]] auto selectors_guard = std::unique_ptr<lxb_selectors_t, detail::selectors_deleter>{selectors};
+  if (lxb_selectors_init(selectors) != LXB_STATUS_OK) {
+    return nullptr;
+  }
+  lxb_selectors_opt_set(selectors, LXB_SELECTORS_OPT_MATCH_ROOT);
 
   lxb_dom_node_t* result = nullptr;
   auto const cb = [](lxb_dom_node_t* n, lxb_css_selector_specificity_t, void* ctx) -> lxb_status_t {
@@ -954,21 +996,35 @@ inline auto serialize_callback(const lxb_char_t* data, size_t len, void* ctx) no
  * @brief CSS セレクタにマッチするすべての要素を返す
  */
 [[nodiscard]] auto inline query_selector_all(lxb_dom_node_t* node, std::string_view selector) -> std::vector<lxb_dom_node_t*> {
-  if (node == nullptr or selector.empty()) return {};
+  if (node == nullptr or selector.empty()) {
+    return {};
+  }
 
   auto parser = lxb_css_parser_create();
-  if (parser == nullptr) { return {}; }
-  auto _ = std::unique_ptr<lxb_css_parser_t, detail::css_parser_deleter>{parser};
-  lxb_css_parser_init(parser, nullptr);
+  if (parser == nullptr) {
+    return {};
+  }
+  [[maybe_unused]] auto parser_guard = std::unique_ptr<lxb_css_parser_t, detail::css_parser_deleter>{parser};
+  if (lxb_css_parser_init(parser, nullptr) != LXB_STATUS_OK) {
+    return {};
+  }
+  std::ignore = lxb_css_parser_selectors_init(parser);
 
   auto list = lxb_css_selectors_parse(parser, reinterpret_cast<const lxb_char_t*>(selector.data()), selector.size());
-  if (list == nullptr) { return {}; }
-  auto _ = std::unique_ptr<lxb_css_selector_list_t, detail::css_selectors_deleter>{list};
+  if (list == nullptr) {
+    return {};
+  }
+  [[maybe_unused]] auto list_guard = std::unique_ptr<lxb_css_selector_list_t, detail::css_selectors_deleter>{list};
 
   auto selectors = lxb_selectors_create();
-  if (selectors == nullptr) { return {}; }
-  auto _ = std::unique_ptr<lxb_selectors_t, detail::selectors_deleter>{selectors};
-  lxb_selectors_init(selectors);
+  if (selectors == nullptr) {
+    return {};
+  }
+  [[maybe_unused]] auto selectors_guard = std::unique_ptr<lxb_selectors_t, detail::selectors_deleter>{selectors};
+  if (lxb_selectors_init(selectors) != LXB_STATUS_OK) {
+    return {};
+  }
+  lxb_selectors_opt_set(selectors, LXB_SELECTORS_OPT_MATCH_ROOT);
 
   std::vector<lxb_dom_node_t*> result;
   auto const cb = [](lxb_dom_node_t* n, [[maybe_unused]] lxb_css_selector_specificity_t spec, void* ctx) -> lxb_status_t {
@@ -1481,11 +1537,98 @@ constexpr auto parse_compound_selector(
   }
 }
 
+enum class selector_prefilter_kind {
+  none,
+  simple,
+};
+
+struct selector_prefilter_spec {
+  selector_prefilter_kind kind{selector_prefilter_kind::none};
+  selector_simple_spec simple{};
+};
+
+struct selector_group_cache_key {
+  lxb_dom_node_t* node{};
+  std::size_t index{};
+
+  [[nodiscard]] auto operator==(selector_group_cache_key const&) const noexcept -> bool = default;
+};
+
+struct selector_group_cache_key_hash {
+  [[nodiscard]] auto operator()(selector_group_cache_key const& key) const noexcept -> std::size_t {
+    auto const node_hash = std::hash<std::uintptr_t>{}(reinterpret_cast<std::uintptr_t>(key.node));
+    auto const index_hash = std::hash<std::size_t>{}(key.index);
+    return node_hash ^ (index_hash + 0x9e3779b97f4a7c15ULL + (node_hash << 6U) + (node_hash >> 2U));
+  }
+};
+
+using selector_group_cache = std::unordered_map<selector_group_cache_key, bool, selector_group_cache_key_hash>;
+
+template <std::size_t Max>
+struct selector_query_context {
+  std::array<selector_prefilter_spec, Max> prefilters{};
+  std::array<selector_group_cache, Max> caches{};
+};
+
+[[nodiscard]] constexpr auto simple_selector_priority(selector_simple_spec const& simple) noexcept -> std::size_t {
+  switch (simple.kind) {
+  case selector_simple_kind::id:
+    return 0;
+  case selector_simple_kind::type:
+    return 1;
+  case selector_simple_kind::class_name:
+    return 2;
+  case selector_simple_kind::attribute:
+    return 3;
+  case selector_simple_kind::universal:
+    return 4;
+  }
+
+  return 4;
+}
+
+template <std::size_t Max>
+[[nodiscard]] constexpr auto build_prefilter(selector_compound_spec<Max> const& compound) noexcept -> selector_prefilter_spec {
+  auto best = selector_prefilter_spec{};
+  auto best_priority = std::size_t{5};
+
+  for (auto const index : std::views::iota(std::size_t{0}, compound.simple_count)) {
+    auto const& simple = compound.simples[index];
+    auto const priority = simple_selector_priority(simple);
+    if (priority >= best_priority || simple.kind == selector_simple_kind::universal) {
+      continue;
+    }
+
+    best = selector_prefilter_spec{
+      .kind = selector_prefilter_kind::simple,
+      .simple = simple,
+    };
+    best_priority = priority;
+  }
+
+  return best;
+}
+
+template <std::size_t Max>
+[[nodiscard]] auto inline create_query_context(selector_spec<Max> const& selector) -> selector_query_context<Max> {
+  auto context = selector_query_context<Max>{};
+  for (auto const group_index : std::views::iota(std::size_t{0}, selector.group_count)) {
+    auto const& group = selector.groups[group_index];
+    if (group.compound_count == 0) {
+      continue;
+    }
+
+    context.prefilters[group_index] = build_prefilter(group.compounds[group.compound_count - 1]);
+    context.caches[group_index].reserve(256);
+  }
+  return context;
+}
+
 /**
  * @brief 1 つの simple selector が対象ノードに一致するか判定します。
  */
 template <std::size_t Max>
-[[nodiscard]] constexpr auto match_simple_selector(lxb_dom_node_t* node, selector_simple_spec const& simple) noexcept -> bool {
+[[nodiscard]] auto inline match_simple_selector(lxb_dom_node_t* node, selector_simple_spec const& simple) noexcept -> bool {
   if (simple.kind == selector_simple_kind::universal) {
     return not is_non_element_node(node);
   }
@@ -1519,14 +1662,20 @@ template <std::size_t Max>
  * @brief 1 つの compound selector が対象ノードに一致するか判定します。
  */
 template <std::size_t Max>
-[[nodiscard]] constexpr auto match_compound_selector(lxb_dom_node_t* node, selector_compound_spec<Max> const& compound) noexcept -> bool {
+[[nodiscard]] auto inline match_compound_selector(lxb_dom_node_t* node, selector_compound_spec<Max> const& compound) noexcept -> bool {
   if (node == nullptr || is_non_element_node(node)) {
     return false;
   }
 
-  for (auto const index : std::views::iota(std::size_t{0}, compound.simple_count)) {
-    if (not match_simple_selector<Max>(node, compound.simples[index])) {
-      return false;
+  for (auto const priority : std::views::iota(std::size_t{0}, std::size_t{5})) {
+    for (auto const index : std::views::iota(std::size_t{0}, compound.simple_count)) {
+      auto const& simple = compound.simples[index];
+      if (simple_selector_priority(simple) != priority) {
+        continue;
+      }
+      if (not match_simple_selector<Max>(node, simple)) {
+        return false;
+      }
     }
   }
   return true;
@@ -1536,71 +1685,94 @@ template <std::size_t Max>
  * @brief 1 つの selector group を右から左へ評価します。
  */
 template <std::size_t Max>
-[[nodiscard]] constexpr auto match_selector_group(lxb_dom_node_t* node, selector_group_spec<Max> const& group, std::size_t index) noexcept -> bool {
+[[nodiscard]] auto inline match_selector_group(
+  lxb_dom_node_t* node,
+  selector_group_spec<Max> const& group,
+  std::size_t index,
+  selector_group_cache& cache) noexcept -> bool {
   if (node == nullptr || index >= group.compound_count) {
     return false;
   }
 
-  if (not match_compound_selector<Max>(node, group.compounds[index])) {
-    return false;
+  auto const key = selector_group_cache_key{.node = node, .index = index};
+  if (auto const it = cache.find(key); it != cache.end()) {
+    return it->second;
   }
 
-  if (index == 0) {
-    return true;
+  auto matched = false;
+  if (match_compound_selector<Max>(node, group.compounds[index])) {
+    if (index == 0) {
+      matched = true;
+    } else {
+      auto const relation = group.compounds[index].relation;
+      switch (relation) {
+      case selector_combinator::child: {
+        auto* parent = node->parent;
+        while (parent != nullptr && is_non_element_node(parent)) {
+          parent = parent->parent;
+        }
+        matched = parent != nullptr && match_selector_group<Max>(parent, group, index - 1, cache);
+        break;
+      }
+      case selector_combinator::adjacent_sibling: {
+        auto* prev = prev_element_sibling(node);
+        matched = prev != nullptr && match_selector_group<Max>(prev, group, index - 1, cache);
+        break;
+      }
+      case selector_combinator::following_sibling: {
+        for (auto* prev = prev_element_sibling(node); prev != nullptr; prev = prev_element_sibling(prev)) {
+          if (match_selector_group<Max>(prev, group, index - 1, cache)) {
+            matched = true;
+            break;
+          }
+        }
+        break;
+      }
+      case selector_combinator::descendant: {
+        for (auto* parent = node->parent; parent != nullptr; parent = parent->parent) {
+          if (is_non_element_node(parent)) {
+            continue;
+          }
+          if (match_selector_group<Max>(parent, group, index - 1, cache)) {
+            matched = true;
+            break;
+          }
+        }
+        break;
+      }
+    }
+  }
   }
 
-  auto const relation = group.compounds[index].relation;
-  switch (relation) {
-  case selector_combinator::child: {
-    auto* parent = node->parent;
-    while (parent != nullptr && is_non_element_node(parent)) {
-      parent = parent->parent;
-    }
-    return parent != nullptr && match_selector_group<Max>(parent, group, index - 1);
-  }
-  case selector_combinator::adjacent_sibling: {
-    auto* prev = prev_element_sibling(node);
-    return prev != nullptr && match_selector_group<Max>(prev, group, index - 1);
-  }
-  case selector_combinator::following_sibling: {
-    for (auto* prev = prev_element_sibling(node); prev != nullptr; prev = prev_element_sibling(prev)) {
-      if (match_selector_group<Max>(prev, group, index - 1)) {
-        return true;
-      }
-    }
-    return false;
-  }
-  case selector_combinator::descendant: {
-    for (auto* parent = node->parent; parent != nullptr; parent = parent->parent) {
-      if (is_non_element_node(parent)) {
-        continue;
-      }
-      if (match_selector_group<Max>(parent, group, index - 1)) {
-        return true;
-      }
-    }
-    return false;
-  }
-  }
-
-  return false;
+  cache.emplace(key, matched);
+  return matched;
 }
 
 /**
  * @brief 解析済み selector 全体にノードが一致するか判定します。
  */
 template <std::size_t Max>
-[[nodiscard]] constexpr auto match_selector(lxb_dom_node_t* node, selector_spec<Max> const& selector) noexcept -> bool {
+[[nodiscard]] auto inline match_selector(
+  lxb_dom_node_t* node,
+  selector_spec<Max> const& selector,
+  selector_query_context<Max>& context) noexcept -> bool {
   if (node == nullptr) {
     return false;
   }
 
-  for (auto const index : std::views::iota(std::size_t{0}, selector.group_count)) {
-    auto const& group = selector.groups[index];
+  for (auto const group_index : std::views::iota(std::size_t{0}, selector.group_count)) {
+    auto const& group = selector.groups[group_index];
     if (group.compound_count == 0) {
       continue;
     }
-    if (match_selector_group<Max>(node, group, group.compound_count - 1)) {
+
+    auto const& prefilter = context.prefilters[group_index];
+    if (prefilter.kind == selector_prefilter_kind::simple &&
+      not match_simple_selector<Max>(node, prefilter.simple)) {
+      continue;
+    }
+
+    if (match_selector_group<Max>(node, group, group.compound_count - 1, context.caches[group_index])) {
       return true;
     }
   }
@@ -1616,8 +1788,12 @@ template <std::size_t Max>
     return nullptr;
   }
 
+  auto context = create_query_context(selector);
   for (auto* current : node_walker{node}) {
-    if (match_selector<Max>(current, selector)) {
+    if (is_non_element_node(current)) {
+      continue;
+    }
+    if (match_selector<Max>(current, selector, context)) {
       return current;
     }
   }
@@ -1634,8 +1810,12 @@ template <std::size_t Max>
     return result;
   }
 
+  auto context = create_query_context(selector);
   for (auto* current : node_walker{node}) {
-    if (match_selector<Max>(current, selector)) {
+    if (is_non_element_node(current)) {
+      continue;
+    }
+    if (match_selector<Max>(current, selector, context)) {
       result.push_back(current);
     }
   }

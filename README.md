@@ -277,6 +277,7 @@ ctest --test-dir build -V
 - `get_first_child_text()` / `get_all_children_text()` は直下のテキストノードだけを対象にします
 - `get_deep_text()` は子孫全体のテキストを対象にします
 - `query_selector()` は無効な selector や初期化失敗時に `nullptr` を返し、`query_selector_all()` は空配列を返します
+- `query_selector()` / `query_selector_all()` と `query_selector<"...">()` / `query_selector_all<"...">()` は、いずれも**開始ノード自身を探索対象に含みます**（root 参加挙動を統一しています）
 - `query_selector<"...">()` / `query_selector_all<"...">()` はコンパイル時解析済みの selector を使います。未対応構文はコンパイルエラーになります
 - walker / range アダプタは Lexbor の生ポインタをそのまま返すため、元の `lxb_html_document_t` の寿命内でだけ使ってください
 
