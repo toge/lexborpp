@@ -25,6 +25,8 @@ static_assert(ranges_compatible_walker<lexborpp::node_walker>);
 static_assert(ranges_compatible_walker<lexborpp::node_sibling_walker>);
 static_assert(ranges_compatible_walker<lexborpp::attr_walker>);
 static_assert(ranges_compatible_walker<lexborpp::node_prev_sibling_walker>);
+static_assert(requires(lxb_dom_node_t* node) { lexborpp::query_selector<"div">(node); });
+static_assert(requires(lxb_dom_node_t* node) { lexborpp::query_selector_all<"div">(node); });
 
 constexpr auto kHtml = R"HTML(<!doctype html><html><body id="body"><div id="container" class="alpha beta" data-role="main"><section id="tree"><article id="branch-a"><em id="leaf-a"></em></article><article id="branch-b"><strong id="leaf-b"></strong></article></section><div id="text-only">first<!--comment-->second</div><div id="mixed"><span>ignore</span>left<b>inner</b>right</div><div id="nested-only"><span>ignore</span></div><p id="class-target" class="match target-class"></p><p id="class-second" class="match"></p><div id="attrs" class="alpha beta" data-role="main" title="Title"></div></div></body></html>)HTML";
 
@@ -163,6 +165,38 @@ TEST_CASE("lexborpp CSS selector and manipulation functions") {
     REQUIRE(lexborpp::query_selector_all(root, "h1").empty());
   }
 
+  SECTION("CSS selectors (compile-time query_selector)") {
+    auto* content = lexborpp::query_selector<"div#content">(root);
+    REQUIRE(content != nullptr);
+    REQUIRE(lexborpp::get_attr_value(content, "id") == "content");
+
+    auto* entry = lexborpp::query_selector<"div.entry">(root);
+    REQUIRE(entry == content);
+
+    auto* bold = lexborpp::query_selector<"span > b">(root);
+    REQUIRE(bold != nullptr);
+    REQUIRE(lexborpp::get_deep_text(bold) == "Bold");
+
+    auto* second = lexborpp::query_selector<"p + p.target">(root);
+    REQUIRE(second != nullptr);
+    REQUIRE(lexborpp::get_deep_text(second) == "Second");
+
+    REQUIRE(lexborpp::query_selector<"non-existent">(root) == nullptr);
+  }
+
+  SECTION("CSS selectors (compile-time query_selector_all)") {
+    auto ps = lexborpp::query_selector_all<"p">(root);
+    REQUIRE(ps.size() == 2);
+    REQUIRE(lexborpp::get_deep_text(ps[0]) == "First");
+    REQUIRE(lexborpp::get_deep_text(ps[1]) == "Second");
+
+    auto const grouped = lexborpp::query_selector_all<"p, span > b">(root);
+    REQUIRE(grouped.size() == 3);
+    REQUIRE(lexborpp::get_deep_text(grouped[0]) == "First");
+    REQUIRE(lexborpp::get_deep_text(grouped[1]) == "Second");
+    REQUIRE(lexborpp::get_deep_text(grouped[2]) == "Bold");
+  }
+
   SECTION("DOM manipulation (attributes)") {
     auto* content = lexborpp::query_selector(root, "#content");
     auto* element = lexborpp::as_element(content);
@@ -198,6 +232,21 @@ TEST_CASE("lexborpp CSS selector and manipulation functions") {
     auto const html_str = lexborpp::outer_html(content);
     REQUIRE(html_str.find("title=\"hello\"") != std::string::npos);
   }
+}
+
+TEST_CASE("lexborpp compile-time CSS selectors handle attributes and grouping") {
+  auto fixture = html_document_fixture{kHtml};
+  auto* root = fixture.document_node();
+
+  auto const container = lexborpp::query_selector_all<"div#container[data-role=main]">(root);
+  REQUIRE(container.size() == 1);
+  REQUIRE(lexborpp::get_attr_value(container[0], "id") == "container");
+
+  auto const matches = lexborpp::query_selector_all<"div[data-role=main], p.match.target-class">(root);
+  REQUIRE(matches.size() == 3);
+  REQUIRE(lexborpp::get_attr_value(matches[0], "id") == "container");
+  REQUIRE(lexborpp::get_attr_value(matches[1], "id") == "class-target");
+  REQUIRE(lexborpp::get_attr_value(matches[2], "id") == "attrs");
 }
 
 TEST_CASE("node_prev_sibling_walker traverses backwards") {
