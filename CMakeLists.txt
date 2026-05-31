@@ -98,6 +98,5 @@ install(FILES
 
 if(BUILD_TESTING)
     find_package(Catch2 REQUIRED CONFIG)
-    enable_testing()
     add_subdirectory(test)
 endif()
