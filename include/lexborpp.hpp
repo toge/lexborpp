@@ -26,6 +26,12 @@ namespace lexborpp {
 
 // --- Forward Declarations & Helpers ---
 
+/**
+ * @brief テキストノードの文字列ビューを取得します。
+ *
+ * @param node 対象ノードです。
+ * @return std::string_view テキストノードであればその内容、そうでなければ空文字列ビューを返します。
+ */
 auto inline to_string(lxb_dom_node_t const* node) noexcept {
   if (node == nullptr || node->type != LXB_DOM_NODE_TYPE_TEXT) {
     return std::string_view{};
@@ -34,6 +40,12 @@ auto inline to_string(lxb_dom_node_t const* node) noexcept {
   return std::string_view{reinterpret_cast<const char*>(data->data.data), data->data.length};
 }
 
+/**
+ * @brief 属性名を文字列ビューとして取得します。
+ *
+ * @param attr 対象属性です。
+ * @return std::string_view 属性名を返します。取得できない場合は空文字列ビューを返します。
+ */
 auto inline to_name_string(lxb_dom_attr_t const* attr) noexcept {
   if (attr == nullptr) {
     return std::string_view{};
@@ -46,6 +58,12 @@ auto inline to_name_string(lxb_dom_attr_t const* attr) noexcept {
   return std::string_view{reinterpret_cast<const char*>(attr_val_data), attr_val_len};
 }
 
+/**
+ * @brief 属性値を文字列ビューとして取得します。
+ *
+ * @param attr 対象属性です。
+ * @return std::string_view 属性値を返します。取得できない場合は空文字列ビューを返します。
+ */
 auto inline to_string(lxb_dom_attr_t const* attr) noexcept {
   if (attr == nullptr) {
     return std::string_view{};
@@ -58,6 +76,12 @@ auto inline to_string(lxb_dom_attr_t const* attr) noexcept {
   return std::string_view{reinterpret_cast<const char*>(attr_val_data), attr_val_len};
 }
 
+/**
+ * @brief ノードが要素ノード以外かを判定します。
+ *
+ * @param node 判定対象ノードです。
+ * @return bool nullptr、テキスト、document、comment、doctype のいずれかであれば true を返します。
+ */
 auto constexpr inline is_non_element_node(lxb_dom_node_t const* node) noexcept -> bool {
   if (node == nullptr) {
     return true;
@@ -68,7 +92,7 @@ auto constexpr inline is_non_element_node(lxb_dom_node_t const* node) noexcept -
 }
 
 /**
- * @brief ノードを要素型に変換する（キャスト）
+ * @brief ノードを要素型に変換します（キャスト）。
  */
 [[nodiscard]] auto constexpr inline as_element(lxb_dom_node_t const* node) noexcept -> lxb_dom_element_t* {
   if (node == nullptr) {
@@ -79,12 +103,23 @@ auto constexpr inline is_non_element_node(lxb_dom_node_t const* node) noexcept -
 
 // --- Walkers ---
 
+/**
+ * @brief 指定ノード以下を深さ優先で巡回する Range View です。
+ */
 class node_walker : public std::ranges::view_interface<node_walker> {
 public:
   using value_type = lxb_dom_node_t*;
 
+  /**
+   * @brief 巡回開始ノードを指定して初期化します。
+   *
+  * @param node 巡回開始ノードです。
+   */
   explicit node_walker(lxb_dom_node_t* node = nullptr) : start(node) { }
 
+  /**
+   * @brief 深さ優先巡回用の forward iterator です。
+   */
   class iterator {
   public:
     using iterator_concept = std::forward_iterator_tag;
@@ -94,8 +129,19 @@ public:
     using pointer = lxb_dom_node_t**;
     using reference = lxb_dom_node_t*&;
 
+    /**
+     * @brief イテレータを初期化します。
+     *
+    * @param node 巡回の起点ノードです。
+    * @param end 現在位置です。
+     */
     iterator(lxb_dom_node_t* node = nullptr, lxb_dom_node_t* end = nullptr) : start(node), current(end) { }
 
+    /**
+     * @brief 次のノードへ進めます。
+     *
+    * @return iterator& 自身への参照を返します。
+     */
     iterator& operator++() noexcept {
       if (current == nullptr) {
         return *this;
@@ -119,13 +165,30 @@ public:
       return *this;
     }
 
+    /**
+     * @brief 現在位置を返してから次へ進めます。
+     *
+    * @return iterator 進行前のイテレータを返します。
+     */
     iterator operator++(int) noexcept {
       auto temp = *this;
       ++*this;
       return temp;
     }
 
+    /**
+     * @brief ほかのイテレータと等しいか比較します。
+     *
+    * @param rhs 比較対象です。
+    * @return auto 現在位置が同じ場合に true を返します。
+     */
     auto operator==(iterator const &rhs) const noexcept { return current == rhs.current; }
+
+    /**
+     * @brief 現在ノードを参照します。
+     *
+    * @return lxb_dom_node_t* const& 現在ノードを返します。
+     */
     lxb_dom_node_t* const& operator*() const noexcept { return current; }
 
   private:
@@ -133,21 +196,36 @@ public:
     lxb_dom_node_t* current;
   };
 
+  /** @brief 先頭イテレータを返します。 */
   [[nodiscard]] iterator begin() noexcept { return iterator{start, start}; }
+  /** @brief 先頭イテレータを返します。 */
   [[nodiscard]] iterator begin() const noexcept { return iterator{start, start}; }
+  /** @brief 終端イテレータを返します。 */
   [[nodiscard]] iterator end() noexcept { return iterator{start, nullptr}; }
+  /** @brief 終端イテレータを返します。 */
   [[nodiscard]] iterator end() const noexcept { return iterator{start, nullptr}; }
 
 private:
   lxb_dom_node_t* start;
 };
 
+/**
+ * @brief 指定ノードから後続兄弟を順方向に巡回する Range View です。
+ */
 class node_sibling_walker : public std::ranges::view_interface<node_sibling_walker> {
 public:
   using value_type = lxb_dom_node_t*;
 
+  /**
+   * @brief 巡回開始ノードを指定して初期化します。
+   *
+  * @param node 巡回開始ノードです。
+   */
   explicit node_sibling_walker(lxb_dom_node_t* node = nullptr) : start(node) { }
 
+  /**
+   * @brief 兄弟ノードを順方向にたどる forward iterator です。
+   */
   class iterator {
   public:
     using iterator_concept = std::forward_iterator_tag;
@@ -157,8 +235,18 @@ public:
     using pointer = lxb_dom_node_t**;
     using reference = lxb_dom_node_t*&;
 
+    /**
+     * @brief イテレータを初期化します。
+     *
+    * @param node 現在ノードです。
+     */
     iterator(lxb_dom_node_t* node = nullptr) : current(node) { }
 
+    /**
+     * @brief 次の兄弟ノードへ進めます。
+     *
+    * @return iterator& 自身への参照を返します。
+     */
     iterator& operator++() noexcept {
       if (current != nullptr) {
         current = current->next;
@@ -166,35 +254,67 @@ public:
       return *this;
     }
 
+    /**
+     * @brief 現在位置を返してから次へ進めます。
+     *
+    * @return iterator 進行前のイテレータを返します。
+     */
     iterator operator++(int) noexcept {
       auto temp = *this;
       ++*this;
       return temp;
     }
 
+    /**
+     * @brief ほかのイテレータと等しいか比較します。
+     *
+    * @param rhs 比較対象です。
+    * @return auto 現在位置が同じ場合に true を返します。
+     */
     auto operator==(iterator const &rhs) const noexcept { return current == rhs.current; }
+
+    /**
+     * @brief 現在ノードを参照します。
+     *
+    * @return lxb_dom_node_t* const& 現在ノードを返します。
+     */
     lxb_dom_node_t* const& operator*() const noexcept { return current; }
 
   private:
     lxb_dom_node_t* current;
   };
 
+  /** @brief 先頭イテレータを返します。 */
   [[nodiscard]] iterator begin() noexcept { return iterator{start}; }
+  /** @brief 先頭イテレータを返します。 */
   [[nodiscard]] iterator begin() const noexcept { return iterator{start}; }
+  /** @brief 終端イテレータを返します。 */
   [[nodiscard]] iterator end() noexcept { return iterator{nullptr}; }
+  /** @brief 終端イテレータを返します。 */
   [[nodiscard]] iterator end() const noexcept { return iterator{nullptr}; }
 
 private:
   lxb_dom_node_t* start;
 };
 
+/**
+ * @brief 指定ノードの直前兄弟を逆方向に巡回する Range View です。
+ */
 class node_prev_sibling_walker : public std::ranges::view_interface<node_prev_sibling_walker> {
 public:
   using value_type = lxb_dom_node_t*;
 
+  /**
+   * @brief 指定ノードの直前兄弟から巡回を開始します。
+   *
+  * @param node 基準ノードです。
+   */
   explicit node_prev_sibling_walker(lxb_dom_node_t* node = nullptr)
     : start(node ? node->prev : nullptr) { }
 
+  /**
+   * @brief 兄弟ノードを逆方向にたどる forward iterator です。
+   */
   class iterator {
   public:
     using iterator_concept = std::forward_iterator_tag;
@@ -204,8 +324,18 @@ public:
     using pointer = lxb_dom_node_t**;
     using reference = lxb_dom_node_t*&;
 
+    /**
+     * @brief イテレータを初期化します。
+     *
+    * @param node 現在ノードです。
+     */
     iterator(lxb_dom_node_t* node = nullptr) : current(node) { }
 
+    /**
+     * @brief 前の兄弟ノードへ進めます。
+     *
+    * @return iterator& 自身への参照を返します。
+     */
     iterator& operator++() noexcept {
       if (current != nullptr) {
         current = current->prev;
@@ -213,40 +343,77 @@ public:
       return *this;
     }
 
+    /**
+     * @brief 現在位置を返してから前へ進めます。
+     *
+    * @return iterator 進行前のイテレータを返します。
+     */
     iterator operator++(int) noexcept {
       auto temp = *this;
       ++*this;
       return temp;
     }
 
+    /**
+     * @brief ほかのイテレータと等しいか比較します。
+     *
+    * @param rhs 比較対象です。
+    * @return auto 現在位置が同じ場合に true を返します。
+     */
     auto operator==(iterator const &rhs) const noexcept { return current == rhs.current; }
+
+    /**
+     * @brief 現在ノードを参照します。
+     *
+    * @return lxb_dom_node_t* const& 現在ノードを返します。
+     */
     lxb_dom_node_t* const& operator*() const noexcept { return current; }
 
   private:
     lxb_dom_node_t* current;
   };
 
+  /** @brief 先頭イテレータを返します。 */
   [[nodiscard]] iterator begin() noexcept { return iterator{start}; }
+  /** @brief 先頭イテレータを返します。 */
   [[nodiscard]] iterator begin() const noexcept { return iterator{start}; }
+  /** @brief 終端イテレータを返します。 */
   [[nodiscard]] iterator end() noexcept { return iterator{nullptr}; }
+  /** @brief 終端イテレータを返します。 */
   [[nodiscard]] iterator end() const noexcept { return iterator{nullptr}; }
 
 private:
   lxb_dom_node_t* start;
 };
 
+/**
+ * @brief 要素の属性列を巡回する Range View です。
+ */
 class attr_walker : public std::ranges::view_interface<attr_walker> {
 public:
   using value_type = lxb_dom_attr_t*;
 
+  /**
+   * @brief ノードから属性巡回を初期化します。
+   *
+  * @param node 対象ノードです。
+   */
   explicit attr_walker(lxb_dom_node_t* node) : start(nullptr) {
     if (node != nullptr and not is_non_element_node(node)) {
       start = lxb_dom_element_first_attribute(lxb_dom_interface_element(node));
     }
   }
 
+  /**
+   * @brief 属性ノードから属性巡回を初期化します。
+   *
+  * @param attr 開始属性です。
+   */
   attr_walker(lxb_dom_attr_t* attr = nullptr) : start(attr) { }
 
+  /**
+   * @brief 属性列を順方向にたどる forward iterator です。
+   */
   class iterator {
   public:
     using iterator_concept = std::forward_iterator_tag;
@@ -256,8 +423,18 @@ public:
     using pointer = lxb_dom_attr_t**;
     using reference = lxb_dom_attr_t*&;
 
+    /**
+     * @brief イテレータを初期化します。
+     *
+    * @param node 現在属性です。
+     */
     iterator(lxb_dom_attr_t* node = nullptr) : current(node) { }
 
+    /**
+     * @brief 次の属性へ進めます。
+     *
+    * @return iterator& 自身への参照を返します。
+     */
     iterator& operator++() noexcept {
       if (current != nullptr) {
         current = lxb_dom_element_next_attribute(current);
@@ -265,22 +442,43 @@ public:
       return *this;
     }
 
+    /**
+     * @brief 現在位置を返してから次へ進めます。
+     *
+    * @return iterator 進行前のイテレータを返します。
+     */
     iterator operator++(int) noexcept {
       auto temp = *this;
       ++*this;
       return temp;
     }
 
+    /**
+     * @brief ほかのイテレータと等しいか比較します。
+     *
+    * @param rhs 比較対象です。
+    * @return auto 現在位置が同じ場合に true を返します。
+     */
     auto operator==(iterator const &rhs) const noexcept { return current == rhs.current; }
+
+    /**
+     * @brief 現在属性を参照します。
+     *
+    * @return lxb_dom_attr_t* const& 現在属性を返します。
+     */
     lxb_dom_attr_t* const& operator*() const noexcept { return current; }
 
   private:
     lxb_dom_attr_t* current;
   };
 
+  /** @brief 先頭イテレータを返します。 */
   [[nodiscard]] iterator begin() noexcept { return iterator{start}; }
+  /** @brief 先頭イテレータを返します。 */
   [[nodiscard]] iterator begin() const noexcept { return iterator{start}; }
+  /** @brief 終端イテレータを返します。 */
   [[nodiscard]] iterator end() noexcept { return iterator{nullptr}; }
+  /** @brief 終端イテレータを返します。 */
   [[nodiscard]] iterator end() const noexcept { return iterator{nullptr}; }
 
 private:
@@ -290,12 +488,12 @@ private:
 // --- Core API ---
 
 /**
- * @brief ノードが指定されたクラスを持っているか確認する。
+ * @brief ノードが指定されたクラスを持っているか確認します。
  *
- * @param node 確認対象のノード
- * @param class_name クラス名
- * @return bool 指定されたクラスを持っている場合はtrue、そうでない場合はfalse
- * @note class属性が空白区切りのリストであることに対応している。
+ * @param node 確認対象のノードです。
+ * @param class_name クラス名です。
+ * @return bool 指定されたクラスを持っている場合は true、そうでない場合は false を返します。
+ * @note class 属性が空白区切りのリストであることに対応しています。
  */
 [[nodiscard]] auto inline has_class(lxb_dom_node_t const* node, std::string_view class_name) noexcept -> bool {
   if (node == nullptr or class_name.empty() or is_non_element_node(node)) {
@@ -325,11 +523,11 @@ private:
 
 
 /**
- * @brief ノードが指定されたすべてのクラスを持っているか確認する。
+ * @brief ノードが指定されたすべてのクラスを持っているか確認します。
  *
- * @param node 確認対象のノード
- * @param class_names クラス名のリスト
- * @return bool すべてのクラスを持っている場合はtrue、そうでない場合はfalse
+ * @param node 確認対象のノードです。
+ * @param class_names クラス名のリストです。
+ * @return bool すべてのクラスを持っている場合は true、そうでない場合は false を返します。
  */
 [[nodiscard]] constexpr auto inline has_class(lxb_dom_node_t const* node, std::initializer_list<std::string_view> class_names) noexcept -> bool {
   if (class_names.size() == 0 or node == nullptr) {
@@ -345,11 +543,11 @@ private:
 }
 
 /**
- * @brief class属性が指定された文字列と完全一致する最初の要素を取得する。
+ * @brief class 属性が指定された文字列と完全一致する最初の要素を取得します。
  *
- * @param node 検索を開始するノード
- * @param class_name 検索するクラス属性文字列（完全一致）
- * @return lxb_dom_node_t* 最初に見つかった要素、見つからない場合は nullptr
+ * @param node 検索を開始するノードです。
+ * @param class_name 検索するクラス属性文字列（完全一致）です。
+ * @return lxb_dom_node_t* 最初に見つかった要素を返します。見つからない場合は nullptr を返します。
  */
 auto inline get_first_element_by_class(lxb_dom_node_t* node, std::string_view class_name) noexcept -> lxb_dom_node_t* {
   if (node == nullptr or class_name.empty()) {
@@ -377,12 +575,12 @@ auto inline get_first_element_by_class(lxb_dom_node_t* node, std::string_view cl
 }
 
 /**
- * @brief 指定されたクラスを持つすべての要素を取得する。
+ * @brief 指定されたクラスを持つすべての要素を取得します。
  *
- * @param node 検索対象のノード
- * @param class_name 検索するクラス名
- * @return std::vector<lxb_dom_node_t*> マッチした全要素のリスト
- * @note has_class 関数を使用して、空白区切りのリストからマッチングを行う。
+ * @param node 検索対象のノードです。
+ * @param class_name 検索するクラス名です。
+ * @return std::vector<lxb_dom_node_t*> マッチした全要素のリストを返します。
+ * @note has_class 関数を使用して、空白区切りのリストからマッチングを行います。
  */
 [[nodiscard]] auto inline get_elements_by_class(lxb_dom_node_t* node, std::string_view class_name) -> std::vector<lxb_dom_node_t*> {
   auto result = std::vector<lxb_dom_node_t*>{};
@@ -399,11 +597,11 @@ auto inline get_first_element_by_class(lxb_dom_node_t* node, std::string_view cl
 }
 
 /**
- * @brief 全子孫テキストノードを結合して取得する。
+ * @brief 全子孫テキストノードを結合して取得します。
  *
- * @param node 対象のノード
- * @param sep 各テキストノードの間に挿入するセパレータ（デフォルトは空文字列）
- * @return std::string 結合されたテキスト文字列
+ * @param node 対象のノードです。
+ * @param sep 各テキストノードの間に挿入するセパレータ（デフォルトは空文字列）です。
+ * @return std::string 結合されたテキスト文字列を返します。
  *
  * @note
  * get_first_child_text  → 直下の最初のテキストノードのみ
@@ -454,6 +652,14 @@ auto inline get_first_element_by_class(lxb_dom_node_t* node, std::string_view cl
   });
 }
 
+/**
+ * @brief 要素に属性を設定または更新します。
+ *
+ * @param element 対象要素です。
+ * @param name 属性名です。
+ * @param value 属性値です。
+ * @return bool 設定に成功した場合に true を返します。
+ */
 [[nodiscard]] auto inline set_attr(lxb_dom_element_t* element, std::string_view name, std::string_view value) noexcept -> bool {
   if (element == nullptr) {
     return false;
@@ -464,6 +670,13 @@ auto inline get_first_element_by_class(lxb_dom_node_t* node, std::string_view cl
   return attr != nullptr;
 }
 
+/**
+ * @brief 要素から指定属性を削除します。
+ *
+ * @param element 対象要素です。
+ * @param name 削除する属性名です。
+ * @return bool 削除に成功した場合に true を返します。
+ */
 [[nodiscard]] auto inline remove_attr(lxb_dom_element_t* element, std::string_view name) noexcept -> bool {
   if (element == nullptr) {
     return false;
@@ -473,6 +686,13 @@ auto inline get_first_element_by_class(lxb_dom_node_t* node, std::string_view cl
   return status == LXB_STATUS_OK;
 }
 
+/**
+ * @brief ノードの子要素をテキストノード 1 つに置き換えます。
+ *
+ * @param node 対象ノードです。
+ * @param text 設定するテキストです。
+ * @return bool 設定に成功した場合に true を返します。
+ */
 [[nodiscard]] auto inline set_text_content(lxb_dom_node_t* node, std::string_view text) noexcept -> bool {
   if (node == nullptr) {
     return false;
@@ -502,7 +722,15 @@ auto inline get_first_element_by_class(lxb_dom_node_t* node, std::string_view cl
 
 // --- Document RAII ---
 
+/**
+ * @brief `lxb_html_document_t` を `std::unique_ptr` で破棄するための deleter です。
+ */
 struct document_deleter {
+  /**
+   * @brief HTML ドキュメントを破棄します。
+   *
+  * @param doc 破棄対象ドキュメントです。
+   */
   auto constexpr operator()(lxb_html_document_t* doc) const noexcept -> void {
     if (doc != nullptr) {
       lxb_html_document_destroy(doc);
@@ -512,6 +740,12 @@ struct document_deleter {
 
 using document_ptr = std::unique_ptr<lxb_html_document_t, document_deleter>;
 
+/**
+ * @brief HTML 文字列をパースして RAII 管理されたドキュメントを返します。
+ *
+ * @param html パース対象の HTML 文字列です。
+ * @return std::expected<document_ptr, lxb_status_t> 成功時はドキュメント、失敗時は Lexbor ステータスを返します。
+ */
 [[nodiscard]] auto inline parse_html(std::string_view const html) noexcept -> std::expected<document_ptr, lxb_status_t> {
   auto* const doc = lxb_html_document_create();
   if (doc == nullptr) {
@@ -527,6 +761,12 @@ using document_ptr = std::unique_ptr<lxb_html_document_t, document_deleter>;
   return document_ptr{doc};
 }
 
+/**
+ * @brief ドキュメントのルートノードを取得します。
+ *
+ * @param doc ドキュメントです。
+ * @return lxb_dom_node_t* ルートノードを返します。無効な場合は nullptr を返します。
+ */
 [[nodiscard]] auto constexpr inline get_root(document_ptr const& doc) noexcept -> lxb_dom_node_t* {
   if (not doc) {
     return nullptr;
@@ -536,6 +776,13 @@ using document_ptr = std::unique_ptr<lxb_html_document_t, document_deleter>;
 
 // --- Lookup & Attributes ---
 
+/**
+ * @brief 指定した id 属性値を持つ最初の要素を取得します。
+ *
+ * @param node 検索開始ノードです。
+ * @param id_name 検索する id 属性値です。
+ * @return lxb_dom_node_t* 最初に見つかった要素を返します。見つからない場合は nullptr を返します。
+ */
 auto inline get_element_by_id(lxb_dom_node_t* node, std::string_view id_name) noexcept -> lxb_dom_node_t* {
   if (node == nullptr) {
     return nullptr;
@@ -562,6 +809,13 @@ auto inline get_element_by_id(lxb_dom_node_t* node, std::string_view id_name) no
   return target.second;
 }
 
+/**
+ * @brief 要素から指定属性の値を取得します。
+ *
+ * @param node 対象ノードです。
+ * @param attr_name 属性名です。
+ * @return std::optional<std::string_view> 属性値を返します。存在しない場合は std::nullopt を返します。
+ */
 auto inline get_attr_value(lxb_dom_node_t* node, std::string_view attr_name) noexcept -> std::optional<std::string_view> {
   if (node == nullptr or is_non_element_node(node)) {
     return std::nullopt;
@@ -609,6 +863,12 @@ auto inline get_attr_value(lxb_dom_node_t* node, std::string_view attr_name) noe
   return std::nullopt;
 }
 
+/**
+ * @brief 直下の最初のテキスト子ノードを取得します。
+ *
+ * @param node 対象ノードです。
+ * @return std::optional<std::string_view> 最初のテキストを返します。存在しない場合は std::nullopt を返します。
+ */
 auto inline get_first_child_text(lxb_dom_node_t* node) noexcept -> std::optional<std::string_view> {
   if (node == nullptr) {
     return std::nullopt;
@@ -623,6 +883,12 @@ auto inline get_first_child_text(lxb_dom_node_t* node) noexcept -> std::optional
   return std::nullopt;
 }
 
+/**
+ * @brief 直下のすべてのテキスト子ノードを連結して取得します。
+ *
+ * @param node 対象ノードです。
+ * @return std::optional<std::string> 連結文字列を返します。テキスト子が無い場合は std::nullopt を返します。
+ */
 auto inline get_all_children_text(lxb_dom_node_t* node) noexcept -> std::optional<std::string> {
   if (node == nullptr) {
     return std::nullopt;
@@ -643,6 +909,13 @@ auto inline get_all_children_text(lxb_dom_node_t* node) noexcept -> std::optiona
   return result;
 }
 
+/**
+ * @brief 直下のすべてのテキスト子ノードを区切り文字付きで連結して取得します。
+ *
+ * @param node 対象ノードです。
+ * @param sep 各テキストの間に挿入する区切り文字です。
+ * @return std::optional<std::string> 連結文字列を返します。テキスト子が無い場合は std::nullopt を返します。
+ */
 auto inline get_all_children_text(lxb_dom_node_t* node, std::string_view const sep) noexcept -> std::optional<std::string> {
   if (node == nullptr) {
     return std::nullopt;
@@ -666,6 +939,14 @@ auto inline get_all_children_text(lxb_dom_node_t* node, std::string_view const s
   return result;
 }
 
+/**
+ * @brief 述語に一致する後続ノードを走査して最初の 1 件を返します。
+ *
+ * @tparam Op ノードを判定する述語型です。
+ * @param node 検索開始ノードです。
+ * @param op 判定関数です。
+ * @return lxb_dom_node_t* 一致したノードを返します。見つからない場合は nullptr を返します。
+ */
 template <typename Op>
 auto inline get_following_element_by_op(lxb_dom_node_t* node, Op op) noexcept -> lxb_dom_node_t* {
   if (node == nullptr) {
@@ -685,6 +966,14 @@ auto inline get_following_element_by_op(lxb_dom_node_t* node, Op op) noexcept ->
   return target.second;
 }
 
+/**
+ * @brief 兄弟列を順方向に走査し、述語に一致する最初のノードを返します。
+ *
+ * @tparam Op ノードを判定する述語型です。
+ * @param node 検索開始ノードです。
+ * @param op 判定関数です。
+ * @return lxb_dom_node_t* 一致したノードを返します。見つからない場合は nullptr を返します。
+ */
 template <typename Op>
 auto inline get_sibling_element_by_op(lxb_dom_node_t* node, Op op) noexcept -> lxb_dom_node_t* {
   if (node == nullptr) {
@@ -698,6 +987,12 @@ auto inline get_sibling_element_by_op(lxb_dom_node_t* node, Op op) noexcept -> l
   return nullptr;
 }
 
+/**
+ * @brief Lexbor のタグ ID を可読なタグ名へ変換します。
+ *
+ * @param tag_id 変換対象のタグ ID です。
+ * @return auto 対応するタグ名を返します。未知の場合は空文字列ビューを返します。
+ */
 auto inline tag_name(lxb_tag_id_t const tag_id) {
   using namespace std::string_view_literals;
   switch(tag_id) {
@@ -903,16 +1198,50 @@ auto inline tag_name(lxb_tag_id_t const tag_id) {
 
 namespace detail {
 
+/**
+ * @brief CSS パーサを破棄する deleter です。
+ */
 struct css_parser_deleter {
+  /**
+   * @brief CSS パーサを破棄します。
+   *
+  * @param p 破棄対象パーサです。
+   */
   void operator()(lxb_css_parser_t* p) const noexcept { lxb_css_parser_destroy(p, true); }
 };
+
+/**
+ * @brief CSS selector リストを破棄する deleter です。
+ */
 struct css_selectors_deleter {
+  /**
+   * @brief CSS selector リストを破棄します。
+   *
+  * @param l 破棄対象リストです。
+   */
   void operator()(lxb_css_selector_list_t* l) const noexcept { lxb_css_selector_list_destroy_memory(l); }
 };
+
+/**
+ * @brief Selector エンジンを破棄する deleter です。
+ */
 struct selectors_deleter {
+  /**
+   * @brief Selector エンジンを破棄します。
+   *
+  * @param s 破棄対象エンジンです。
+   */
   void operator()(lxb_selectors_t* s) const noexcept { lxb_selectors_destroy(s, true); }
 };
 
+/**
+ * @brief HTML シリアライズ結果を文字列へ追記するコールバックです。
+ *
+ * @param data 追記する文字列データです。
+ * @param len データ長です。
+ * @param ctx `std::string*` を指すコンテキストです。
+ * @return lxb_status_t 常に `LXB_STATUS_OK` を返します。
+ */
 inline auto serialize_callback(const lxb_char_t* data, size_t len, void* ctx) noexcept -> lxb_status_t {
   auto* const str = static_cast<std::string*>(ctx);
   str->append(reinterpret_cast<const char*>(data), len);
@@ -922,7 +1251,7 @@ inline auto serialize_callback(const lxb_char_t* data, size_t len, void* ctx) no
 } // namespace detail
 
 /**
- * @brief ノードの外部 HTML（自身を含む）を取得する
+ * @brief ノードの外部 HTML（自身を含む）を取得します。
  */
 [[nodiscard]] auto inline outer_html(lxb_dom_node_t const* node) -> std::string {
   if (node == nullptr) return "";
@@ -933,7 +1262,7 @@ inline auto serialize_callback(const lxb_char_t* data, size_t len, void* ctx) no
 }
 
 /**
- * @brief ノードの内部 HTML（子ノード群）を取得する
+ * @brief ノードの内部 HTML（子ノード群）を取得します。
  */
 [[nodiscard]] auto inline inner_html(lxb_dom_node_t const* node) -> std::string {
   if (node == nullptr) return "";
@@ -946,7 +1275,7 @@ inline auto serialize_callback(const lxb_char_t* data, size_t len, void* ctx) no
 }
 
 /**
- * @brief CSS セレクタにマッチする最初の要素を返す
+ * @brief CSS セレクタにマッチする最初の要素を返します。
  */
 [[nodiscard]] auto inline query_selector(lxb_dom_node_t* node, std::string_view selector) -> lxb_dom_node_t* {
   if (node == nullptr or selector.empty()) {
@@ -993,7 +1322,7 @@ inline auto serialize_callback(const lxb_char_t* data, size_t len, void* ctx) no
 }
 
 /**
- * @brief CSS セレクタにマッチするすべての要素を返す
+ * @brief CSS セレクタにマッチするすべての要素を返します。
  */
 [[nodiscard]] auto inline query_selector_all(lxb_dom_node_t* node, std::string_view selector) -> std::vector<lxb_dom_node_t*> {
   if (node == nullptr or selector.empty()) {
@@ -1042,7 +1371,7 @@ inline auto serialize_callback(const lxb_char_t* data, size_t len, void* ctx) no
 /**
  * @brief 指定したタグ名のいずれかに一致するノードのみを通過させる Range アダプタです。
  *
- * @tparam Tags 対象タグ (例: LXB_TAG_TABLE, LXB_TAG_TR)
+ * @tparam Tags 対象タグです (例: LXB_TAG_TABLE, LXB_TAG_TR)。
  *
  * 使用例:
  * @code
@@ -1065,11 +1394,30 @@ namespace detail {
 template <std::size_t N>
 struct fixed_string {
   char data[N]{};
+
+  /**
+   * @brief 文字列リテラルから fixed_string を構築します。
+   *
+  * @param str 元となる文字列リテラルです。
+   */
   constexpr fixed_string(char const (&str)[N]) noexcept {
     std::copy_n(str, N, data);
   }
+
+  /**
+   * @brief 末尾のヌル文字を除いた文字列ビューを返します。
+   *
+  * @return std::string_view 保持中の文字列ビューを返します。
+   */
   constexpr auto view() const noexcept -> std::string_view { return {data, N - 1}; }
-  constexpr auto operator==(fixed_string const&) const -> bool = default;
+
+  /**
+   * @brief ほかの fixed_string と内容が同じか比較します。
+   *
+   * @param rhs 比較対象です。
+   * @return bool 内容が一致する場合に true を返します。
+   */
+  constexpr auto operator==(fixed_string const& rhs) const -> bool = default;
 };
 
 /**
@@ -1197,6 +1545,34 @@ struct selector_simple_spec {
 };
 
 /**
+ * @brief selector 評価前の候補絞り込み方法を表します。
+ */
+enum class selector_prefilter_kind {
+  none,
+  simple,
+};
+
+/**
+ * @brief selector 評価前に適用する絞り込み条件を保持します。
+ */
+struct selector_prefilter_spec {
+  selector_prefilter_kind kind{selector_prefilter_kind::none};
+  selector_simple_spec simple{};
+};
+
+/**
+ * @brief selector group の結合パターンを分類します。
+ */
+enum class selector_group_shape {
+  simple,
+  descendant_chain,
+  child_chain,
+  adjacent_sibling_chain,
+  following_sibling_chain,
+  mixed,
+};
+
+/**
  * @brief 連続する単一 selector をまとめた compound selector を保持します。
  */
 template <std::size_t Max>
@@ -1213,6 +1589,8 @@ template <std::size_t Max>
 struct selector_group_spec {
   std::array<selector_compound_spec<Max>, Max> compounds{};
   std::size_t compound_count{};
+  selector_prefilter_spec prefilter{};
+  selector_group_shape shape{selector_group_shape::simple};
 };
 
 /**
@@ -1223,6 +1601,92 @@ struct selector_spec {
   std::array<selector_group_spec<Max>, Max> groups{};
   std::size_t group_count{};
 };
+
+/**
+ * @brief simple selector の評価優先度を返します。
+ *
+ * @param simple 対象 simple selector です。
+ * @return std::size_t 優先度を返します。値が小さいほど優先です。
+ */
+[[nodiscard]] constexpr auto simple_selector_priority(selector_simple_spec const& simple) noexcept -> std::size_t {
+  switch (simple.kind) {
+  case selector_simple_kind::id:
+    return 0;
+  case selector_simple_kind::type:
+    return 1;
+  case selector_simple_kind::class_name:
+    return 2;
+  case selector_simple_kind::attribute:
+    return 3;
+  case selector_simple_kind::universal:
+    return 4;
+  }
+
+  return 4;
+}
+
+/**
+ * @brief compound selector から前処理に適した simple selector を選びます。
+ *
+ * @tparam Max 配列容量です。
+ * @param compound 対象 compound selector です。
+ * @return selector_prefilter_spec 最適化用の prefilter 条件を返します。
+ */
+template <std::size_t Max>
+[[nodiscard]] constexpr auto build_prefilter(selector_compound_spec<Max> const& compound) noexcept -> selector_prefilter_spec {
+  auto best = selector_prefilter_spec{};
+  auto best_priority = std::size_t{5};
+
+  for (auto const index : std::views::iota(std::size_t{0}, compound.simple_count)) {
+    auto const& simple = compound.simples[index];
+    auto const priority = simple_selector_priority(simple);
+    if (priority >= best_priority || simple.kind == selector_simple_kind::universal) {
+      continue;
+    }
+
+    best = selector_prefilter_spec{
+      .kind = selector_prefilter_kind::simple,
+      .simple = simple,
+    };
+    best_priority = priority;
+  }
+
+  return best;
+}
+
+/**
+ * @brief selector group の結合パターンを分類します。
+ *
+ * @tparam Max 配列容量です。
+ * @param group 対象 selector group です。
+ * @return selector_group_shape 分類結果を返します。
+ */
+template <std::size_t Max>
+[[nodiscard]] constexpr auto classify_group_shape(selector_group_spec<Max> const& group) noexcept -> selector_group_shape {
+  if (group.compound_count <= 1) {
+    return selector_group_shape::simple;
+  }
+
+  auto const first_relation = group.compounds[1].relation;
+  for (auto const index : std::views::iota(std::size_t{2}, group.compound_count)) {
+    if (group.compounds[index].relation != first_relation) {
+      return selector_group_shape::mixed;
+    }
+  }
+
+  switch (first_relation) {
+  case selector_combinator::descendant:
+    return selector_group_shape::descendant_chain;
+  case selector_combinator::child:
+    return selector_group_shape::child_chain;
+  case selector_combinator::adjacent_sibling:
+    return selector_group_shape::adjacent_sibling_chain;
+  case selector_combinator::following_sibling:
+    return selector_group_shape::following_sibling_chain;
+  }
+
+  return selector_group_shape::mixed;
+}
 
 /**
  * @brief 要素ノードの qualified name を文字列として取得します。
@@ -1255,6 +1719,24 @@ struct selector_spec {
     }
   }
   return nullptr;
+}
+
+/**
+ * @brief 最も近い親要素ノードを返します。
+ *
+ * @param node 対象ノードです。
+ * @return lxb_dom_node_t* 親要素ノードを返します。存在しない場合は nullptr を返します。
+ */
+[[nodiscard]] constexpr auto parent_element(lxb_dom_node_t* node) noexcept -> lxb_dom_node_t* {
+  if (node == nullptr) {
+    return nullptr;
+  }
+
+  auto* parent = node->parent;
+  while (parent != nullptr && is_non_element_node(parent)) {
+    parent = parent->parent;
+  }
+  return parent;
 }
 
 /**
@@ -1314,6 +1796,12 @@ constexpr auto parse_compound_selector(
   selector_group_spec<Max>& group,
   selector_combinator relation) -> void;
 
+/**
+ * @brief CSS セレクタ文字列をコンパイル時に解析します。
+ *
+ * @tparam Selector 解析対象の selector 文字列です。
+ * @return auto 解析済み selector 情報を返します。
+ */
 template <detail::fixed_string Selector>
 constexpr auto parse_selector_spec() {
   auto constexpr max = Selector.view().empty() ? std::size_t{1} : Selector.view().size();
@@ -1380,6 +1868,12 @@ constexpr auto parse_selector_spec() {
 
       throw "NTTP CSS selector token is invalid";
     }
+
+    if (group.compound_count == 0) {
+      throw "NTTP CSS selector group must not be empty";
+    }
+    group.prefilter = build_prefilter(group.compounds[group.compound_count - 1]);
+    group.shape = classify_group_shape(group);
   }
 
   return result;
@@ -1537,24 +2031,32 @@ constexpr auto parse_compound_selector(
   }
 }
 
-enum class selector_prefilter_kind {
-  none,
-  simple,
-};
-
-struct selector_prefilter_spec {
-  selector_prefilter_kind kind{selector_prefilter_kind::none};
-  selector_simple_spec simple{};
-};
-
+/**
+ * @brief selector group の評価結果キャッシュ用キーです。
+ */
 struct selector_group_cache_key {
   lxb_dom_node_t* node{};
   std::size_t index{};
 
-  [[nodiscard]] auto operator==(selector_group_cache_key const&) const noexcept -> bool = default;
+  /**
+   * @brief キー同士が同一か比較します。
+   *
+   * @param rhs 比較対象です。
+   * @return bool ノードとインデックスが一致する場合に true を返します。
+   */
+  [[nodiscard]] auto operator==(selector_group_cache_key const& rhs) const noexcept -> bool = default;
 };
 
+/**
+ * @brief `selector_group_cache_key` 用ハッシュ関数です。
+ */
 struct selector_group_cache_key_hash {
+  /**
+   * @brief キャッシュキーのハッシュ値を計算します。
+   *
+  * @param key 対象キーです。
+  * @return std::size_t ハッシュ値を返します。
+   */
   [[nodiscard]] auto operator()(selector_group_cache_key const& key) const noexcept -> std::size_t {
     auto const node_hash = std::hash<std::uintptr_t>{}(reinterpret_cast<std::uintptr_t>(key.node));
     auto const index_hash = std::hash<std::size_t>{}(key.index);
@@ -1564,61 +2066,31 @@ struct selector_group_cache_key_hash {
 
 using selector_group_cache = std::unordered_map<selector_group_cache_key, bool, selector_group_cache_key_hash>;
 
+/**
+ * @brief selector 評価で使用するキャッシュ群を保持します。
+ */
 template <std::size_t Max>
 struct selector_query_context {
-  std::array<selector_prefilter_spec, Max> prefilters{};
   std::array<selector_group_cache, Max> caches{};
 };
 
-[[nodiscard]] constexpr auto simple_selector_priority(selector_simple_spec const& simple) noexcept -> std::size_t {
-  switch (simple.kind) {
-  case selector_simple_kind::id:
-    return 0;
-  case selector_simple_kind::type:
-    return 1;
-  case selector_simple_kind::class_name:
-    return 2;
-  case selector_simple_kind::attribute:
-    return 3;
-  case selector_simple_kind::universal:
-    return 4;
-  }
+template <detail::fixed_string Selector>
+inline constexpr auto selector_storage_capacity_v = Selector.view().empty() ? std::size_t{1} : Selector.view().size();
 
-  return 4;
-}
+template <detail::fixed_string Selector>
+inline constexpr auto compiled_selector_v = parse_selector_spec<Selector>();
 
-template <std::size_t Max>
-[[nodiscard]] constexpr auto build_prefilter(selector_compound_spec<Max> const& compound) noexcept -> selector_prefilter_spec {
-  auto best = selector_prefilter_spec{};
-  auto best_priority = std::size_t{5};
-
-  for (auto const index : std::views::iota(std::size_t{0}, compound.simple_count)) {
-    auto const& simple = compound.simples[index];
-    auto const priority = simple_selector_priority(simple);
-    if (priority >= best_priority || simple.kind == selector_simple_kind::universal) {
-      continue;
-    }
-
-    best = selector_prefilter_spec{
-      .kind = selector_prefilter_kind::simple,
-      .simple = simple,
-    };
-    best_priority = priority;
-  }
-
-  return best;
-}
-
+/**
+ * @brief selector 評価用コンテキストを生成します。
+ *
+ * @tparam Max 配列容量です。
+ * @param selector 対象 selector 情報です。
+ * @return selector_query_context<Max> 初期化済みコンテキストを返します。
+ */
 template <std::size_t Max>
 [[nodiscard]] auto inline create_query_context(selector_spec<Max> const& selector) -> selector_query_context<Max> {
   auto context = selector_query_context<Max>{};
   for (auto const group_index : std::views::iota(std::size_t{0}, selector.group_count)) {
-    auto const& group = selector.groups[group_index];
-    if (group.compound_count == 0) {
-      continue;
-    }
-
-    context.prefilters[group_index] = build_prefilter(group.compounds[group.compound_count - 1]);
     context.caches[group_index].reserve(256);
   }
   return context;
@@ -1682,9 +2154,25 @@ template <std::size_t Max>
 }
 
 /**
- * @brief 1 つの selector group を右から左へ評価します。
+ * @brief prefilter 条件だけで候補ノードを判定します。
+ *
+ * @tparam Max 配列容量です。
+ * @param node 対象ノードです。
+ * @param prefilter 絞り込み条件です。
+ * @return bool 条件を満たす場合に true を返します。
  */
 template <std::size_t Max>
+[[nodiscard]] auto inline match_prefilter(lxb_dom_node_t* node, selector_prefilter_spec const& prefilter) noexcept -> bool {
+  if (prefilter.kind != selector_prefilter_kind::simple) {
+    return true;
+  }
+  return match_simple_selector<Max>(node, prefilter.simple);
+}
+
+/**
+ * @brief 1 つの selector group を右から左へ評価します。
+ */
+template <selector_group_shape Shape, std::size_t Max>
 [[nodiscard]] auto inline match_selector_group(
   lxb_dom_node_t* node,
   selector_group_spec<Max> const& group,
@@ -1703,49 +2191,100 @@ template <std::size_t Max>
   if (match_compound_selector<Max>(node, group.compounds[index])) {
     if (index == 0) {
       matched = true;
-    } else {
-      auto const relation = group.compounds[index].relation;
-      switch (relation) {
-      case selector_combinator::child: {
-        auto* parent = node->parent;
-        while (parent != nullptr && is_non_element_node(parent)) {
-          parent = parent->parent;
+  } else if constexpr (Shape == selector_group_shape::simple) {
+    matched = false;
+  } else if constexpr (Shape == selector_group_shape::child_chain) {
+    auto* parent = parent_element(node);
+    matched = parent != nullptr && match_selector_group<Shape, Max>(parent, group, index - 1, cache);
+  } else if constexpr (Shape == selector_group_shape::adjacent_sibling_chain) {
+    auto* prev = prev_element_sibling(node);
+    matched = prev != nullptr && match_selector_group<Shape, Max>(prev, group, index - 1, cache);
+  } else if constexpr (Shape == selector_group_shape::following_sibling_chain) {
+    for (auto* prev = prev_element_sibling(node); prev != nullptr; prev = prev_element_sibling(prev)) {
+      if (match_selector_group<Shape, Max>(prev, group, index - 1, cache)) {
+        matched = true;
+        break;
+      }
+    }
+  } else if constexpr (Shape == selector_group_shape::descendant_chain) {
+    for (auto* parent = parent_element(node); parent != nullptr; parent = parent_element(parent)) {
+      if (match_selector_group<Shape, Max>(parent, group, index - 1, cache)) {
+        matched = true;
+        break;
+      }
+    }
+  } else {
+    switch (group.compounds[index].relation) {
+    case selector_combinator::child: {
+      auto* parent = parent_element(node);
+      matched = parent != nullptr && match_selector_group<Shape, Max>(parent, group, index - 1, cache);
+      break;
+    }
+    case selector_combinator::adjacent_sibling: {
+      auto* prev = prev_element_sibling(node);
+      matched = prev != nullptr && match_selector_group<Shape, Max>(prev, group, index - 1, cache);
+      break;
+    }
+    case selector_combinator::following_sibling: {
+      for (auto* prev = prev_element_sibling(node); prev != nullptr; prev = prev_element_sibling(prev)) {
+        if (match_selector_group<Shape, Max>(prev, group, index - 1, cache)) {
+          matched = true;
+          break;
         }
-        matched = parent != nullptr && match_selector_group<Max>(parent, group, index - 1, cache);
-        break;
       }
-      case selector_combinator::adjacent_sibling: {
-        auto* prev = prev_element_sibling(node);
-        matched = prev != nullptr && match_selector_group<Max>(prev, group, index - 1, cache);
-        break;
-      }
-      case selector_combinator::following_sibling: {
-        for (auto* prev = prev_element_sibling(node); prev != nullptr; prev = prev_element_sibling(prev)) {
-          if (match_selector_group<Max>(prev, group, index - 1, cache)) {
-            matched = true;
-            break;
-          }
+      break;
+    }
+    case selector_combinator::descendant: {
+      for (auto* parent = parent_element(node); parent != nullptr; parent = parent_element(parent)) {
+        if (match_selector_group<Shape, Max>(parent, group, index - 1, cache)) {
+          matched = true;
+          break;
         }
-        break;
       }
-      case selector_combinator::descendant: {
-        for (auto* parent = node->parent; parent != nullptr; parent = parent->parent) {
-          if (is_non_element_node(parent)) {
-            continue;
-          }
-          if (match_selector_group<Max>(parent, group, index - 1, cache)) {
-            matched = true;
-            break;
-          }
-        }
-        break;
-      }
+      break;
+    }
     }
   }
   }
 
   cache.emplace(key, matched);
   return matched;
+}
+
+/**
+ * @brief selector group の形状に応じて一致判定を振り分けます。
+ *
+ * @tparam Max 配列容量です。
+ * @param node 対象ノードです。
+ * @param group 対象 selector group です。
+ * @param cache 評価キャッシュです。
+ * @return bool 一致した場合に true を返します。
+ */
+template <std::size_t Max>
+[[nodiscard]] auto inline match_selector_group_by_shape(
+  lxb_dom_node_t* node,
+  selector_group_spec<Max> const& group,
+  selector_group_cache& cache) noexcept -> bool {
+  if (group.compound_count == 0) {
+  return false;
+  }
+
+  switch (group.shape) {
+  case selector_group_shape::simple:
+  return match_selector_group<selector_group_shape::simple, Max>(node, group, group.compound_count - 1, cache);
+  case selector_group_shape::descendant_chain:
+  return match_selector_group<selector_group_shape::descendant_chain, Max>(node, group, group.compound_count - 1, cache);
+  case selector_group_shape::child_chain:
+  return match_selector_group<selector_group_shape::child_chain, Max>(node, group, group.compound_count - 1, cache);
+  case selector_group_shape::adjacent_sibling_chain:
+  return match_selector_group<selector_group_shape::adjacent_sibling_chain, Max>(node, group, group.compound_count - 1, cache);
+  case selector_group_shape::following_sibling_chain:
+  return match_selector_group<selector_group_shape::following_sibling_chain, Max>(node, group, group.compound_count - 1, cache);
+  case selector_group_shape::mixed:
+  return match_selector_group<selector_group_shape::mixed, Max>(node, group, group.compound_count - 1, cache);
+  }
+
+  return false;
 }
 
 /**
@@ -1766,17 +2305,84 @@ template <std::size_t Max>
       continue;
     }
 
-    auto const& prefilter = context.prefilters[group_index];
-    if (prefilter.kind == selector_prefilter_kind::simple &&
-      not match_simple_selector<Max>(node, prefilter.simple)) {
+    if (not match_prefilter<Max>(node, group.prefilter)) {
       continue;
     }
 
-    if (match_selector_group<Max>(node, group, group.compound_count - 1, context.caches[group_index])) {
+    if (match_selector_group_by_shape<Max>(node, group, context.caches[group_index])) {
       return true;
     }
   }
   return false;
+}
+
+/**
+ * @brief コンパイル済み selector group の一致判定を行います。
+ *
+ * @tparam Selector コンパイル済み selector 文字列です。
+ * @tparam GroupIndex 対象 group のインデックスです。
+ * @param node 対象ノードです。
+ * @param context 評価コンテキストです。
+ * @return bool 一致した場合に true を返します。
+ */
+template <detail::fixed_string Selector, std::size_t GroupIndex>
+[[nodiscard]] auto inline match_selector_group_compiled(
+  lxb_dom_node_t* node,
+  selector_query_context<selector_storage_capacity_v<Selector>>& context) noexcept -> bool {
+  constexpr auto const& group = compiled_selector_v<Selector>.groups[GroupIndex];
+  constexpr auto const shape = group.shape;
+
+  if constexpr (group.compound_count == 0) {
+    return false;
+  } else {
+    if (not match_prefilter<selector_storage_capacity_v<Selector>>(node, group.prefilter)) {
+      return false;
+    }
+    return match_selector_group<shape, selector_storage_capacity_v<Selector>>(
+      node,
+      group,
+      group.compound_count - 1,
+      context.caches[GroupIndex]);
+  }
+}
+
+/**
+ * @brief すべてのコンパイル済み selector group を順に評価します。
+ *
+ * @tparam Selector コンパイル済み selector 文字列です。
+ * @tparam GroupIndices 評価対象 group インデックス列です。
+ * @param node 対象ノードです。
+ * @param context 評価コンテキストです。
+ * @param indices 不使用の index sequence です。
+ * @return bool いずれかの group に一致した場合に true を返します。
+ */
+template <detail::fixed_string Selector, std::size_t... GroupIndices>
+[[nodiscard]] auto inline match_selector_compiled_impl(
+  lxb_dom_node_t* node,
+  selector_query_context<selector_storage_capacity_v<Selector>>& context,
+  [[maybe_unused]] std::index_sequence<GroupIndices...> indices) noexcept -> bool {
+  return (... || match_selector_group_compiled<Selector, GroupIndices>(node, context));
+}
+
+/**
+ * @brief コンパイル済み selector 全体にノードが一致するか判定します。
+ *
+ * @tparam Selector コンパイル済み selector 文字列です。
+ * @param node 対象ノードです。
+ * @param context 評価コンテキストです。
+ * @return bool 一致した場合に true を返します。
+ */
+template <detail::fixed_string Selector>
+[[nodiscard]] auto inline match_selector_compiled(
+  lxb_dom_node_t* node,
+  selector_query_context<selector_storage_capacity_v<Selector>>& context) noexcept -> bool {
+  if (node == nullptr) {
+    return false;
+  }
+  return match_selector_compiled_impl<Selector>(
+    node,
+    context,
+    std::make_index_sequence<compiled_selector_v<Selector>.group_count>{});
 }
 
 /**
@@ -1794,6 +2400,24 @@ template <std::size_t Max>
       continue;
     }
     if (match_selector<Max>(current, selector, context)) {
+      return current;
+    }
+  }
+  return nullptr;
+}
+
+template <detail::fixed_string Selector>
+[[nodiscard]] auto inline query_selector_impl(lxb_dom_node_t* node) -> lxb_dom_node_t* {
+  if (node == nullptr) {
+    return nullptr;
+  }
+
+  auto context = create_query_context(compiled_selector_v<Selector>);
+  for (auto* current : node_walker{node}) {
+    if (is_non_element_node(current)) {
+      continue;
+    }
+    if (match_selector_compiled<Selector>(current, context)) {
       return current;
     }
   }
@@ -1822,12 +2446,31 @@ template <std::size_t Max>
   return result;
 }
 
+template <detail::fixed_string Selector>
+[[nodiscard]] auto inline query_selector_all_impl(lxb_dom_node_t* node) -> std::vector<lxb_dom_node_t*> {
+  auto result = std::vector<lxb_dom_node_t*>{};
+  if (node == nullptr) {
+    return result;
+  }
+
+  auto context = create_query_context(compiled_selector_v<Selector>);
+  for (auto* current : node_walker{node}) {
+    if (is_non_element_node(current)) {
+      continue;
+    }
+    if (match_selector_compiled<Selector>(current, context)) {
+      result.push_back(current);
+    }
+  }
+  return result;
+}
+
 } // namespace detail
 
 /**
  * @brief 指定した id 属性値を持つノードのみを通過させる Range アダプタです。
  *
- * @tparam Id 対象の id 属性値 (例: "forecast-point-3h-today")
+ * @tparam Id 対象の id 属性値です (例: "forecast-point-3h-today")。
  *
  * 使用例:
  * @code
@@ -1841,7 +2484,7 @@ inline constexpr auto id = std::views::filter(
 /**
  * @brief 指定した class 属性値のいずれかを持つノードのみを通過させる Range アダプタです。
  *
- * @tparam Classes 対象の class 属性値 (例: "section-wrap")
+ * @tparam Classes 対象の class 属性値です (例: "section-wrap")。
  *
  * 使用例:
  * @code
@@ -1858,8 +2501,8 @@ inline constexpr auto clazz = std::views::filter([](lxb_dom_node_t* node) noexce
 /**
  * @brief 指定した属性名・属性値を持つノードのみを通過させる Range アダプタです。
  *
- * @tparam Attr 属性名 (例: "class")
- * @tparam Value 属性値 (例: "section-wrap")
+ * @tparam Attr 属性名です (例: "class")。
+ * @tparam Value 属性値です (例: "section-wrap")。
  *
  * 使用例:
  * @code
@@ -1871,28 +2514,26 @@ inline constexpr auto attr = std::views::filter(
     [](lxb_dom_node_t* node) noexcept { return lexborpp::get_attr_value(node, Attr.view()) == Value.view(); });
 
 /**
- * @brief NTTP で渡された CSS セレクタにマッチする最初の要素を返す
+ * @brief NTTP で渡された CSS セレクタにマッチする最初の要素を返します。
  */
 template <detail::fixed_string Selector>
 [[nodiscard]] auto inline query_selector(lxb_dom_node_t* node) -> lxb_dom_node_t* {
   if constexpr (Selector.view().empty()) {
     return nullptr;
   } else {
-    auto constexpr compiled = detail::parse_selector_spec<Selector>();
-    return detail::query_selector_impl(node, compiled);
+    return detail::query_selector_impl<Selector>(node);
   }
 }
 
 /**
- * @brief NTTP で渡された CSS セレクタにマッチするすべての要素を返す
+ * @brief NTTP で渡された CSS セレクタにマッチするすべての要素を返します。
  */
 template <detail::fixed_string Selector>
 [[nodiscard]] auto inline query_selector_all(lxb_dom_node_t* node) -> std::vector<lxb_dom_node_t*> {
   if constexpr (Selector.view().empty()) {
     return {};
   } else {
-    auto constexpr compiled = detail::parse_selector_spec<Selector>();
-    return detail::query_selector_all_impl(node, compiled);
+    return detail::query_selector_all_impl<Selector>(node);
   }
 }
 
