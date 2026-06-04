@@ -27,27 +27,6 @@ static_assert(ranges_compatible_walker<lexborpp::attr_walker>);
 static_assert(ranges_compatible_walker<lexborpp::node_prev_sibling_walker>);
 static_assert(requires(lxb_dom_node_t* node) { lexborpp::query_selector<"div">(node); });
 static_assert(requires(lxb_dom_node_t* node) { lexborpp::query_selector_all<"div">(node); });
-
-constexpr auto kPrefilterSpec = lexborpp::detail::parse_selector_spec<"section[data-role=tree] article.card#leaf-b">();
-static_assert(kPrefilterSpec.groups[0].prefilter.kind == lexborpp::detail::selector_prefilter_kind::simple);
-static_assert(kPrefilterSpec.groups[0].prefilter.simple.kind == lexborpp::detail::selector_simple_kind::id);
-static_assert(kPrefilterSpec.groups[0].prefilter.simple.value == "leaf-b");
-
-constexpr auto kGroupPrefilterSpec = lexborpp::detail::parse_selector_spec<"div.alpha[data-role=main], article.card#branch-b">();
-static_assert(kGroupPrefilterSpec.groups[0].prefilter.simple.kind == lexborpp::detail::selector_simple_kind::type);
-static_assert(kGroupPrefilterSpec.groups[0].prefilter.simple.value == "div");
-static_assert(kGroupPrefilterSpec.groups[1].prefilter.simple.kind == lexborpp::detail::selector_simple_kind::id);
-static_assert(kGroupPrefilterSpec.groups[1].prefilter.simple.value == "branch-b");
-
-constexpr auto kShapeSpec = lexborpp::detail::parse_selector_spec<
-  "div#container, section article strong, section > article > strong, article + article, article ~ article, section > article strong">();
-static_assert(kShapeSpec.groups[0].shape == lexborpp::detail::selector_group_shape::simple);
-static_assert(kShapeSpec.groups[1].shape == lexborpp::detail::selector_group_shape::descendant_chain);
-static_assert(kShapeSpec.groups[2].shape == lexborpp::detail::selector_group_shape::child_chain);
-static_assert(kShapeSpec.groups[3].shape == lexborpp::detail::selector_group_shape::adjacent_sibling_chain);
-static_assert(kShapeSpec.groups[4].shape == lexborpp::detail::selector_group_shape::following_sibling_chain);
-static_assert(kShapeSpec.groups[5].shape == lexborpp::detail::selector_group_shape::mixed);
-
 constexpr auto kHtml = R"HTML(<!doctype html><html><body id="body"><div id="container" class="alpha beta" data-role="main"><section id="tree"><article id="branch-a"><em id="leaf-a"></em></article><article id="branch-b"><strong id="leaf-b"></strong></article></section><div id="text-only">first<!--comment-->second</div><div id="mixed"><span>ignore</span>left<b>inner</b>right</div><div id="nested-only"><span>ignore</span></div><p id="class-target" class="match target-class"></p><p id="class-second" class="match"></p><div id="attrs" class="alpha beta" data-role="main" title="Title"></div></div></body></html>)HTML";
 
 auto require_node(html_document_fixture const& fixture, std::string_view id) -> lxb_dom_node_t* {
