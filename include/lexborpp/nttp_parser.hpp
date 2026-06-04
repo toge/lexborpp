@@ -172,34 +172,6 @@ struct selector_simple_spec {
 };
 
 /**
- * @brief selector 評価前の候補絞り込み方法を表します。
- */
-enum class selector_prefilter_kind {
-  none,
-  simple,
-};
-
-/**
- * @brief selector 評価前に適用する絞り込み条件を保持します。
- */
-struct selector_prefilter_spec {
-  selector_prefilter_kind kind{selector_prefilter_kind::none};
-  selector_simple_spec simple{};
-};
-
-/**
- * @brief selector group の結合パターンを分類します。
- */
-enum class selector_group_shape {
-  simple,
-  descendant_chain,
-  child_chain,
-  adjacent_sibling_chain,
-  following_sibling_chain,
-  mixed,
-};
-
-/**
  * @brief 連続する単一 selector をまとめた compound selector を保持します。
  */
 template <std::size_t Max>
@@ -216,8 +188,6 @@ template <std::size_t Max>
 struct selector_group_spec {
   std::array<selector_compound_spec<Max>, Max> compounds{};
   std::size_t compound_count{};
-  selector_prefilter_spec prefilter{};
-  selector_group_shape shape{selector_group_shape::simple};
 };
 
 /**
@@ -228,92 +198,6 @@ struct selector_spec {
   std::array<selector_group_spec<Max>, Max> groups{};
   std::size_t group_count{};
 };
-
-/**
- * @brief simple selector の評価優先度を返します。
- *
- * @param simple 対象 simple selector です。
- * @return std::size_t 優先度を返します。値が小さいほど優先です。
- */
-[[nodiscard]] constexpr auto simple_selector_priority(selector_simple_spec const& simple) noexcept -> std::size_t {
-  switch (simple.kind) {
-  case selector_simple_kind::id:
-    return 0;
-  case selector_simple_kind::type:
-    return 1;
-  case selector_simple_kind::class_name:
-    return 2;
-  case selector_simple_kind::attribute:
-    return 3;
-  case selector_simple_kind::universal:
-    return 4;
-  }
-
-  return 4;
-}
-
-/**
- * @brief compound selector から前処理に適した simple selector を選びます。
- *
- * @tparam Max 配列容量です。
- * @param compound 対象 compound selector です。
- * @return selector_prefilter_spec 最適化用の prefilter 条件を返します。
- */
-template <std::size_t Max>
-[[nodiscard]] constexpr auto build_prefilter(selector_compound_spec<Max> const& compound) noexcept -> selector_prefilter_spec {
-  auto best = selector_prefilter_spec{};
-  auto best_priority = std::size_t{5};
-
-  for (auto const index : std::views::iota(std::size_t{0}, compound.simple_count)) {
-    auto const& simple = compound.simples[index];
-    auto const priority = simple_selector_priority(simple);
-    if (priority >= best_priority || simple.kind == selector_simple_kind::universal) {
-      continue;
-    }
-
-    best = selector_prefilter_spec{
-      .kind = selector_prefilter_kind::simple,
-      .simple = simple,
-    };
-    best_priority = priority;
-  }
-
-  return best;
-}
-
-/**
- * @brief selector group の結合パターンを分類します。
- *
- * @tparam Max 配列容量です。
- * @param group 対象 selector group です。
- * @return selector_group_shape 分類結果を返します。
- */
-template <std::size_t Max>
-[[nodiscard]] constexpr auto classify_group_shape(selector_group_spec<Max> const& group) noexcept -> selector_group_shape {
-  if (group.compound_count <= 1) {
-    return selector_group_shape::simple;
-  }
-
-  auto const first_relation = group.compounds[1].relation;
-  for (auto const index : std::views::iota(std::size_t{2}, group.compound_count)) {
-    if (group.compounds[index].relation != first_relation) {
-      return selector_group_shape::mixed;
-    }
-  }
-
-  switch (first_relation) {
-  case selector_combinator::descendant:
-    return selector_group_shape::descendant_chain;
-  case selector_combinator::child:
-    return selector_group_shape::child_chain;
-  case selector_combinator::adjacent_sibling:
-    return selector_group_shape::adjacent_sibling_chain;
-  case selector_combinator::following_sibling:
-    return selector_group_shape::following_sibling_chain;
-  }
-
-  return selector_group_shape::mixed;
-}
 
 /**
  * @brief 要素ノードの qualified name を文字列として取得します。
@@ -499,8 +383,6 @@ constexpr auto parse_selector_spec() {
     if (group.compound_count == 0) {
       throw "NTTP CSS selector group must not be empty";
     }
-    group.prefilter = build_prefilter(group.compounds[group.compound_count - 1]);
-    group.shape = classify_group_shape(group);
   }
 
   return result;
