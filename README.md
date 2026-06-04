@@ -61,18 +61,6 @@ cmake -B build \
 cmake --build build --parallel
 ```
 
-付属の `build.sh` でも configure と build をまとめて実行できます。
-
-```bash
-./build.sh
-```
-
-静的リンク向けの `build_static/` を作る場合は次です。
-
-```bash
-./build.sh static
-```
-
 ### 3. インストールして `find_package` で使う
 
 このプロジェクトは CMake package config をインストールできます。
