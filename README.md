@@ -284,7 +284,9 @@ ctest --test-dir build -V
 ## 収録ファイル
 
 - `include/lexborpp.hpp`
-  - 公開 API 本体です
+  - 公開 API の umbrella ヘッダです。実体は `include/lexborpp/` 配下の関心事ごとに分かれた 8 ヘッダに分かれており、本ヘッダがそれを再 `#include` します。利用者側はこれまで通り `#include <lexborpp.hpp>` だけで全 API が使えます。
+- `include/lexborpp/`
+  - 内部実装の分割ヘッダ群 (core / tag_name / serialize_runtime / nttp_parser / nttp_match / nttp_range_adapters / nttp_query / ranges_specializations)。直接 `#include` することは想定していません。
 - `cmake/lexborppConfig.cmake.in`
   - `find_package(lexborpp CONFIG REQUIRED)` 用の package config テンプレートです
 - `build.sh`

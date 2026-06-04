@@ -1,0 +1,219 @@
+#ifndef LEXBORPP_TAG_NAME_HPP_
+#define LEXBORPP_TAG_NAME_HPP_
+
+#include <string_view>
+
+#include "lexbor/dom/dom.h"
+
+namespace lexborpp {
+/**
+ * @brief Lexbor のタグ ID を可読なタグ名へ変換します。
+ *
+ * @param tag_id 変換対象のタグ ID です。
+ * @return auto 対応するタグ名を返します。未知の場合は空文字列ビューを返します。
+ */
+auto inline tag_name(lxb_tag_id_t const tag_id) {
+  using namespace std::string_view_literals;
+  switch(tag_id) {
+  case LXB_TAG__UNDEF: return "UNDEF"sv;
+  case LXB_TAG__END_OF_FILE: return "END_OF_FILE"sv;
+  case LXB_TAG__TEXT: return "TEXT"sv;
+  case LXB_TAG__DOCUMENT: return "DOCUMENT"sv;
+  case LXB_TAG__EM_COMMENT: return "EM_COMMENT"sv;
+  case LXB_TAG__EM_DOCTYPE: return "EM_DOCTYPE"sv;
+  case LXB_TAG_A: return "A"sv;
+  case LXB_TAG_ABBR: return "ABBR"sv;
+  case LXB_TAG_ACRONYM: return "ACRONYM"sv;
+  case LXB_TAG_ADDRESS: return "ADDRESS"sv;
+  case LXB_TAG_ALTGLYPH: return "ALTGLYPH"sv;
+  case LXB_TAG_ALTGLYPHDEF: return "ALTGLYPHDEF"sv;
+  case LXB_TAG_ALTGLYPHITEM: return "ALTGLYPHITEM"sv;
+  case LXB_TAG_ANIMATECOLOR: return "ANIMATECOLOR"sv;
+  case LXB_TAG_ANIMATEMOTION: return "ANIMATEMOTION"sv;
+  case LXB_TAG_ANIMATETRANSFORM: return "ANIMATETRANSFORM"sv;
+  case LXB_TAG_ANNOTATION_XML: return "ANNOTATION_XML"sv;
+  case LXB_TAG_APPLET: return "APPLET"sv;
+  case LXB_TAG_AREA: return "AREA"sv;
+  case LXB_TAG_ARTICLE: return "ARTICLE"sv;
+  case LXB_TAG_ASIDE: return "ASIDE"sv;
+  case LXB_TAG_AUDIO: return "AUDIO"sv;
+  case LXB_TAG_B: return "B"sv;
+  case LXB_TAG_BASE: return "BASE"sv;
+  case LXB_TAG_BASEFONT: return "BASEFONT"sv;
+  case LXB_TAG_BDI: return "BDI"sv;
+  case LXB_TAG_BDO: return "BDO"sv;
+  case LXB_TAG_BGSOUND: return "BGSOUND"sv;
+  case LXB_TAG_BIG: return "BIG"sv;
+  case LXB_TAG_BLINK: return "BLINK"sv;
+  case LXB_TAG_BLOCKQUOTE: return "BLOCKQUOTE"sv;
+  case LXB_TAG_BODY: return "BODY"sv;
+  case LXB_TAG_BR: return "BR"sv;
+  case LXB_TAG_BUTTON: return "BUTTON"sv;
+  case LXB_TAG_CANVAS: return "CANVAS"sv;
+  case LXB_TAG_CAPTION: return "CAPTION"sv;
+  case LXB_TAG_CENTER: return "CENTER"sv;
+  case LXB_TAG_CITE: return "CITE"sv;
+  case LXB_TAG_CLIPPATH: return "CLIPPATH"sv;
+  case LXB_TAG_CODE: return "CODE"sv;
+  case LXB_TAG_COL: return "COL"sv;
+  case LXB_TAG_COLGROUP: return "COLGROUP"sv;
+  case LXB_TAG_DATA: return "DATA"sv;
+  case LXB_TAG_DATALIST: return "DATALIST"sv;
+  case LXB_TAG_DD: return "DD"sv;
+  case LXB_TAG_DEL: return "DEL"sv;
+  case LXB_TAG_DESC: return "DESC"sv;
+  case LXB_TAG_DETAILS: return "DETAILS"sv;
+  case LXB_TAG_DFN: return "DFN"sv;
+  case LXB_TAG_DIALOG: return "DIALOG"sv;
+  case LXB_TAG_DIR: return "DIR"sv;
+  case LXB_TAG_DIV: return "DIV"sv;
+  case LXB_TAG_DL: return "DL"sv;
+  case LXB_TAG_DT: return "DT"sv;
+  case LXB_TAG_EM: return "EM"sv;
+  case LXB_TAG_EMBED: return "EMBED"sv;
+  case LXB_TAG_FEBLEND: return "FEBLEND"sv;
+  case LXB_TAG_FECOLORMATRIX: return "FECOLORMATRIX"sv;
+  case LXB_TAG_FECOMPONENTTRANSFER: return "FECOMPONENTTRANSFER"sv;
+  case LXB_TAG_FECOMPOSITE: return "FECOMPOSITE"sv;
+  case LXB_TAG_FECONVOLVEMATRIX: return "FECONVOLVEMATRIX"sv;
+  case LXB_TAG_FEDIFFUSELIGHTING: return "FEDIFFUSELIGHTING"sv;
+  case LXB_TAG_FEDISPLACEMENTMAP: return "FEDISPLACEMENTMAP"sv;
+  case LXB_TAG_FEDISTANTLIGHT: return "FEDISTANTLIGHT"sv;
+  case LXB_TAG_FEDROPSHADOW: return "FEDROPSHADOW"sv;
+  case LXB_TAG_FEFLOOD: return "FEFLOOD"sv;
+  case LXB_TAG_FEFUNCA: return "FEFUNCA"sv;
+  case LXB_TAG_FEFUNCB: return "FEFUNCB"sv;
+  case LXB_TAG_FEFUNCG: return "FEFUNCG"sv;
+  case LXB_TAG_FEFUNCR: return "FEFUNCR"sv;
+  case LXB_TAG_FEGAUSSIANBLUR: return "FEGAUSSIANBLUR"sv;
+  case LXB_TAG_FEIMAGE: return "FEIMAGE"sv;
+  case LXB_TAG_FEMERGE: return "FEMERGE"sv;
+  case LXB_TAG_FEMERGENODE: return "FEMERGENODE"sv;
+  case LXB_TAG_FEMORPHOLOGY: return "FEMORPHOLOGY"sv;
+  case LXB_TAG_FEOFFSET: return "FEOFFSET"sv;
+  case LXB_TAG_FEPOINTLIGHT: return "FEPOINTLIGHT"sv;
+  case LXB_TAG_FESPECULARLIGHTING: return "FESPECULARLIGHTING"sv;
+  case LXB_TAG_FESPOTLIGHT: return "FESPOTLIGHT"sv;
+  case LXB_TAG_FETILE: return "FETILE"sv;
+  case LXB_TAG_FETURBULENCE: return "FETURBULENCE"sv;
+  case LXB_TAG_FIELDSET: return "FIELDSET"sv;
+  case LXB_TAG_FIGCAPTION: return "FIGCAPTION"sv;
+  case LXB_TAG_FIGURE: return "FIGURE"sv;
+  case LXB_TAG_FONT: return "FONT"sv;
+  case LXB_TAG_FOOTER: return "FOOTER"sv;
+  case LXB_TAG_FOREIGNOBJECT: return "FOREIGNOBJECT"sv;
+  case LXB_TAG_FORM: return "FORM"sv;
+  case LXB_TAG_FRAME: return "FRAME"sv;
+  case LXB_TAG_FRAMESET: return "FRAMESET"sv;
+  case LXB_TAG_GLYPHREF: return "GLYPHREF"sv;
+  case LXB_TAG_H1: return "H1"sv;
+  case LXB_TAG_H2: return "H2"sv;
+  case LXB_TAG_H3: return "H3"sv;
+  case LXB_TAG_H4: return "H4"sv;
+  case LXB_TAG_H5: return "H5"sv;
+  case LXB_TAG_H6: return "H6"sv;
+  case LXB_TAG_HEAD: return "HEAD"sv;
+  case LXB_TAG_HEADER: return "HEADER"sv;
+  case LXB_TAG_HGROUP: return "HGROUP"sv;
+  case LXB_TAG_HR: return "HR"sv;
+  case LXB_TAG_HTML: return "HTML"sv;
+  case LXB_TAG_I: return "I"sv;
+  case LXB_TAG_IFRAME: return "IFRAME"sv;
+  case LXB_TAG_IMAGE: return "IMAGE"sv;
+  case LXB_TAG_IMG: return "IMG"sv;
+  case LXB_TAG_INPUT: return "INPUT"sv;
+  case LXB_TAG_INS: return "INS"sv;
+  case LXB_TAG_ISINDEX: return "ISINDEX"sv;
+  case LXB_TAG_KBD: return "KBD"sv;
+  case LXB_TAG_KEYGEN: return "KEYGEN"sv;
+  case LXB_TAG_LABEL: return "LABEL"sv;
+  case LXB_TAG_LEGEND: return "LEGEND"sv;
+  case LXB_TAG_LI: return "LI"sv;
+  case LXB_TAG_LINEARGRADIENT: return "LINEARGRADIENT"sv;
+  case LXB_TAG_LINK: return "LINK"sv;
+  case LXB_TAG_LISTING: return "LISTING"sv;
+  case LXB_TAG_MAIN: return "MAIN"sv;
+  case LXB_TAG_MALIGNMARK: return "MALIGNMARK"sv;
+  case LXB_TAG_MAP: return "MAP"sv;
+  case LXB_TAG_MARK: return "MARK"sv;
+  case LXB_TAG_MARQUEE: return "MARQUEE"sv;
+  case LXB_TAG_MATH: return "MATH"sv;
+  case LXB_TAG_MENU: return "MENU"sv;
+  case LXB_TAG_META: return "META"sv;
+  case LXB_TAG_METER: return "METER"sv;
+  case LXB_TAG_MFENCED: return "MFENCED"sv;
+  case LXB_TAG_MGLYPH: return "MGLYPH"sv;
+  case LXB_TAG_MI: return "MI"sv;
+  case LXB_TAG_MN: return "MN"sv;
+  case LXB_TAG_MO: return "MO"sv;
+  case LXB_TAG_MS: return "MS"sv;
+  case LXB_TAG_MTEXT: return "MTEXT"sv;
+  case LXB_TAG_MULTICOL: return "MULTICOL"sv;
+  case LXB_TAG_NAV: return "NAV"sv;
+  case LXB_TAG_NEXTID: return "NEXTID"sv;
+  case LXB_TAG_NOBR: return "NOBR"sv;
+  case LXB_TAG_NOEMBED: return "NOEMBED"sv;
+  case LXB_TAG_NOFRAMES: return "NOFRAMES"sv;
+  case LXB_TAG_NOSCRIPT: return "NOSCRIPT"sv;
+  case LXB_TAG_OBJECT: return "OBJECT"sv;
+  case LXB_TAG_OL: return "OL"sv;
+  case LXB_TAG_OPTGROUP: return "OPTGROUP"sv;
+  case LXB_TAG_OPTION: return "OPTION"sv;
+  case LXB_TAG_OUTPUT: return "OUTPUT"sv;
+  case LXB_TAG_P: return "P"sv;
+  case LXB_TAG_PARAM: return "PARAM"sv;
+  case LXB_TAG_PATH: return "PATH"sv;
+  case LXB_TAG_PICTURE: return "PICTURE"sv;
+  case LXB_TAG_PLAINTEXT: return "PLAINTEXT"sv;
+  case LXB_TAG_PRE: return "PRE"sv;
+  case LXB_TAG_PROGRESS: return "PROGRESS"sv;
+  case LXB_TAG_Q: return "Q"sv;
+  case LXB_TAG_RADIALGRADIENT: return "RADIALGRADIENT"sv;
+  case LXB_TAG_RB: return "RB"sv;
+  case LXB_TAG_RP: return "RP"sv;
+  case LXB_TAG_RT: return "RT"sv;
+  case LXB_TAG_RTC: return "RTC"sv;
+  case LXB_TAG_RUBY: return "RUBY"sv;
+  case LXB_TAG_S: return "S"sv;
+  case LXB_TAG_SAMP: return "SAMP"sv;
+  case LXB_TAG_SCRIPT: return "SCRIPT"sv;
+  case LXB_TAG_SECTION: return "SECTION"sv;
+  case LXB_TAG_SELECT: return "SELECT"sv;
+  case LXB_TAG_SLOT: return "SLOT"sv;
+  case LXB_TAG_SMALL: return "SMALL"sv;
+  case LXB_TAG_SOURCE: return "SOURCE"sv;
+  case LXB_TAG_SPACER: return "SPACER"sv;
+  case LXB_TAG_SPAN: return "SPAN"sv;
+  case LXB_TAG_STRIKE: return "STRIKE"sv;
+  case LXB_TAG_STRONG: return "STRONG"sv;
+  case LXB_TAG_STYLE: return "STYLE"sv;
+  case LXB_TAG_SUB: return "SUB"sv;
+  case LXB_TAG_SUMMARY: return "SUMMARY"sv;
+  case LXB_TAG_SUP: return "SUP"sv;
+  case LXB_TAG_SVG: return "SVG"sv;
+  case LXB_TAG_TABLE: return "TABLE"sv;
+  case LXB_TAG_TBODY: return "TBODY"sv;
+  case LXB_TAG_TD: return "TD"sv;
+  case LXB_TAG_TEMPLATE: return "TEMPLATE"sv;
+  case LXB_TAG_TEXTAREA: return "TEXTAREA"sv;
+  case LXB_TAG_TEXTPATH: return "TEXTPATH"sv;
+  case LXB_TAG_TFOOT: return "TFOOT"sv;
+  case LXB_TAG_TH: return "TH"sv;
+  case LXB_TAG_THEAD: return "THEAD"sv;
+  case LXB_TAG_TIME: return "TIME"sv;
+  case LXB_TAG_TITLE: return "TITLE"sv;
+  case LXB_TAG_TR: return "TR"sv;
+  case LXB_TAG_TRACK: return "TRACK"sv;
+  case LXB_TAG_TT: return "TT"sv;
+  case LXB_TAG_U: return "U"sv;
+  case LXB_TAG_UL: return "UL"sv;
+  case LXB_TAG_VAR: return "VAR"sv;
+  case LXB_TAG_VIDEO: return "VIDEO"sv;
+  case LXB_TAG_WBR: return "WBR"sv;
+  case LXB_TAG_XMP: return "XMP"sv;
+  default: return ""sv;
+  }
+}
+}  // namespace lexborpp
+
+#endif  // LEXBORPP_TAG_NAME_HPP_
