@@ -73,6 +73,8 @@ set(LEXBORPP_INSTALL_CMAKEDIR "${CMAKE_INSTALL_LIBDIR}/cmake/lexborpp")
 install(TARGETS lexborpp EXPORT lexborppTargets)
 install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/include/lexborpp.hpp"
         DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/include/lexborpp"
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
 install(EXPORT lexborppTargets
         FILE lexborppTargets.cmake
