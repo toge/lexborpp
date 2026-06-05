@@ -275,6 +275,106 @@ TEST_CASE("lexborpp CSS selector and manipulation functions") {
   }
 }
 
+TEST_CASE("runtime CSS selectors match all combinator types") {
+  auto fixture = html_document_fixture{kHtml};
+  auto* root = fixture.document_node();
+
+  SECTION("type selector") {
+    auto* node = lexborpp::query_selector(root, "article");
+    REQUIRE(node != nullptr);
+    REQUIRE(lexborpp::get_attr_value(node, "id") == "branch-a");
+  }
+
+  SECTION("universal selector") {
+    auto all = lexborpp::query_selector_all(root, "*");
+    REQUIRE(all.size() > 0);
+  }
+
+  SECTION("id selector") {
+    auto* node = lexborpp::query_selector(root, "#leaf-b");
+    REQUIRE(node != nullptr);
+    REQUIRE(lexborpp::get_attr_value(node, "id") == "leaf-b");
+  }
+
+  SECTION("class selector") {
+    auto* node = lexborpp::query_selector(root, ".alpha");
+    REQUIRE(node != nullptr);
+    REQUIRE(lexborpp::get_attr_value(node, "id") == "container");
+  }
+
+  SECTION("attribute selector equals") {
+    auto* node = lexborpp::query_selector(root, "[data-role=main]");
+    REQUIRE(node != nullptr);
+    REQUIRE(lexborpp::get_attr_value(node, "id") == "container");
+  }
+
+  SECTION("attribute selector exists") {
+    auto* node = lexborpp::query_selector(root, "[data-role]");
+    REQUIRE(node != nullptr);
+  }
+
+  SECTION("compound selector") {
+    auto* node = lexborpp::query_selector(root, "div[data-role=main]");
+    REQUIRE(node != nullptr);
+    REQUIRE(lexborpp::get_attr_value(node, "id") == "container");
+  }
+
+  SECTION("child combinator") {
+    auto* node = lexborpp::query_selector(root, "section > article");
+    REQUIRE(node != nullptr);
+    REQUIRE(lexborpp::get_attr_value(node, "id") == "branch-a");
+  }
+
+  SECTION("descendant combinator") {
+    auto* node = lexborpp::query_selector(root, "section strong");
+    REQUIRE(node != nullptr);
+    REQUIRE(lexborpp::get_attr_value(node, "id") == "leaf-b");
+  }
+
+  SECTION("adjacent sibling combinator") {
+    auto* tree = lexborpp::query_selector(root, "#tree");
+    auto* node = lexborpp::query_selector(tree, "article + article");
+    REQUIRE(node != nullptr);
+    REQUIRE(lexborpp::get_attr_value(node, "id") == "branch-b");
+  }
+
+  SECTION("following sibling combinator") {
+    auto* tree = lexborpp::query_selector(root, "#tree");
+    auto* node = lexborpp::query_selector(tree, "#branch-a ~ article");
+    REQUIRE(node != nullptr);
+    REQUIRE(lexborpp::get_attr_value(node, "id") == "branch-b");
+  }
+
+  SECTION("comma group") {
+    auto results = lexborpp::query_selector_all(root, "em, strong");
+    REQUIRE(results.size() == 2);
+  }
+
+  SECTION("complex mixed selector") {
+    auto* node = lexborpp::query_selector(root, "section > article#branch-b strong");
+    REQUIRE(node != nullptr);
+    REQUIRE(lexborpp::get_attr_value(node, "id") == "leaf-b");
+  }
+
+  SECTION("empty selector returns nullptr") {
+    REQUIRE(lexborpp::query_selector(root, "") == nullptr);
+  }
+
+  SECTION("nullptr node returns nullptr") {
+    REQUIRE(lexborpp::query_selector(nullptr, "div") == nullptr);
+  }
+
+  SECTION("non-matching selector returns nullptr") {
+    REQUIRE(lexborpp::query_selector(root, "h1") == nullptr);
+  }
+
+  SECTION("self-matching includes root") {
+    auto* node = lexborpp::query_selector(root, "body");
+    REQUIRE(node != nullptr);
+    REQUIRE(lexborpp::get_attr_value(node, "id") == "body");
+  }
+}
+
 TEST_CASE("lexborpp compile-time CSS selectors handle attributes and grouping") {
   auto fixture = html_document_fixture{kHtml};
   auto* root = fixture.document_node();
