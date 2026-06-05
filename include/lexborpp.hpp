@@ -9,5 +9,7 @@
 #include "lexborpp/nttp_range_adapters.hpp"
 #include "lexborpp/nttp_query.hpp"
 #include "lexborpp/ranges_specializations.hpp"
+#include "lexborpp/runtime_css_parser.hpp"
+#include "lexborpp/runtime_css_match.hpp"
 
 #endif  // LEXBORPP_HPP_
