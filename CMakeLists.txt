@@ -100,3 +100,7 @@ if(BUILD_TESTING)
     find_package(Catch2 REQUIRED CONFIG)
     add_subdirectory(test)
 endif()
+
+add_executable(bench_css_selector benchmark/bench_css_selector.cpp)
+target_link_libraries(bench_css_selector PRIVATE lexborpp::lexborpp)
+target_compile_features(bench_css_selector PRIVATE ${STD_CPP})
