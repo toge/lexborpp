@@ -3,19 +3,9 @@ project(lexborpp VERSION 0.0.1 LANGUAGES CXX)
 
 include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
-include(CTest)
 
-## add stdc++ compiler flag
-include(CheckCXXCompilerFlag)
-CHECK_CXX_COMPILER_FLAG("-std=c++26" COMPILER_SUPPORTS_CXX26)
-CHECK_CXX_COMPILER_FLAG("-std=c++23" COMPILER_SUPPORTS_CXX23)
-if(COMPILER_SUPPORTS_CXX26)
-    set(STD_CPP cxx_std_26)
-elseif(COMPILER_SUPPORTS_CXX23)
-    set(STD_CPP cxx_std_23)
-else()
-    message(STATUS "The compiler ${CMAKE_CXX_COMPILER} has no C++23 support. Please use a different C++ compiler.")
-endif()
+option(BUILD_TEST "Build tests" ON)
+option(BUILD_BENCH "Build benchmarks" ON)
 
 ## add warning
 if (CMAKE_COMPILER_IS_GNUCXX)
@@ -66,7 +56,7 @@ target_include_directories(lexborpp
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
 target_link_libraries(lexborpp INTERFACE lexbor::lexbor)
-target_compile_features(lexborpp INTERFACE ${STD_CPP})
+target_compile_features(lexborpp INTERFACE cxx_std_23)
 
 set(LEXBORPP_INSTALL_CMAKEDIR "${CMAKE_INSTALL_LIBDIR}/cmake/lexborpp")
 
@@ -98,11 +88,12 @@ install(FILES
             "${CMAKE_CURRENT_BINARY_DIR}/lexborppConfigVersion.cmake"
         DESTINATION ${LEXBORPP_INSTALL_CMAKEDIR})
 
-if(BUILD_TESTING)
-    find_package(Catch2 REQUIRED CONFIG)
+if(BUILD_TEST)
     add_subdirectory(test)
 endif()
 
-add_executable(bench_css_selector benchmark/bench_css_selector.cpp)
-target_link_libraries(bench_css_selector PRIVATE lexborpp::lexborpp)
-target_compile_features(bench_css_selector PRIVATE ${STD_CPP})
+if(BUILD_BENCH)
+    add_executable(bench_css_selector benchmark/bench_css_selector.cpp)
+    target_link_libraries(bench_css_selector PRIVATE lexborpp::lexborpp)
+    target_compile_features(bench_css_selector PRIVATE cxx_std_23)
+endif()
