@@ -36,6 +36,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 find_package(lexbor CONFIG QUIET)
 
+# lexbor::lexbor_staticなどbuild typeで変動するので工夫する
 if(NOT TARGET lexbor::lexbor)
     find_path(LEXBOR_INCLUDE_DIR NAMES lexbor/html/parser.h REQUIRED)
     find_library(LEXBOR_LIBRARY NAMES lexbor_static lexbor REQUIRED)
