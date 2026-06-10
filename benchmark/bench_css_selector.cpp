@@ -7,7 +7,7 @@
 
 namespace {
 
-constexpr auto kIterations = 10000;
+constexpr auto kIterations = 10000z;
 
 constexpr auto kHtml = R"HTML(<!doctype html>
 <html>
