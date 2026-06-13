@@ -163,6 +163,7 @@ template <detail::fixed_string Selector>
   if (node == nullptr) {
     return result;
   }
+  result.reserve(16);
   for (auto* current : node_walker{node}) {
     if (is_non_element_node(current)) {
       continue;

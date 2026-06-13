@@ -129,6 +129,7 @@ template <std::size_t Max>
   if (node == nullptr || selector.empty()) return result;
 
   auto spec = parse_runtime_selector_auto(selector);
+  result.reserve(16);
 
   for (auto* current : node_walker{node}) {
     if (is_non_element_node(current)) continue;

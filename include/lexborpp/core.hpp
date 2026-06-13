@@ -632,23 +632,21 @@ auto inline get_first_element_by_class(lxb_dom_node_t* node, std::string_view cl
   }
 
   // 案 B — node_walker を使う
-  auto const walker = node_walker{const_cast<lxb_dom_node_t*>(node)};
-  auto text_nodes = walker
-    | std::views::filter([](lxb_dom_node_t* n) noexcept { return n->type == LXB_DOM_NODE_TYPE_TEXT; })
-    | std::views::transform([](lxb_dom_node_t* n) noexcept {
-        auto const data = lxb_dom_interface_character_data(n);
-        return std::string_view{reinterpret_cast<const char*>(data->data.data), data->data.length};
-      });
-
+  auto result = std::string{};
   auto first = true;
-  return std::ranges::fold_left(text_nodes, std::string{}, [sep, &first](std::string acc, std::string_view sv) mutable {
-    if (not first) {
-      acc.append(sep);
+  for (auto* n : node_walker{const_cast<lxb_dom_node_t*>(node)}) {
+    if (n->type != LXB_DOM_NODE_TYPE_TEXT) {
+      continue;
     }
-    acc.append(sv);
+    auto const data = lxb_dom_interface_character_data(n);
+    auto const sv = std::string_view{reinterpret_cast<const char*>(data->data.data), data->data.length};
+    if (not first) {
+      result.append(sep);
+    }
+    result.append(sv);
     first = false;
-    return acc;
-  });
+  }
+  return result;
 }
 
 /**
@@ -842,19 +840,6 @@ auto inline get_attr_value(lxb_dom_node_t* node, std::string_view attr_name) noe
   auto* attr = lxb_dom_element_attr_by_name(element, reinterpret_cast<lxb_char_t const*>(attr_name.data()), attr_name.size());
   if (attr != nullptr) {
     auto const attr_val_data = lxb_dom_attr_value(attr, &attr_val_len);
-    if (attr_val_data != nullptr) {
-      return std::string_view{reinterpret_cast<const char*>(attr_val_data), attr_val_len};
-    }
-  }
-
-  for (auto* p = lxb_dom_element_first_attribute(element); p != nullptr; p = lxb_dom_element_next_attribute(p)) {
-    auto attr_name_len = size_t{};
-    auto const attr_name_data = lxb_dom_attr_qualified_name(p, &attr_name_len);
-    if (attr_name_data == nullptr or std::string_view{reinterpret_cast<const char*>(attr_name_data), attr_name_len} != attr_name) {
-      continue;
-    }
-
-    auto const attr_val_data = lxb_dom_attr_value(p, &attr_val_len);
     if (attr_val_data != nullptr) {
       return std::string_view{reinterpret_cast<const char*>(attr_val_data), attr_val_len};
     }
