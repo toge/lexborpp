@@ -312,6 +312,11 @@ constexpr auto parse_compound_selector(
  *
  * @tparam Selector 解析対象の selector 文字列です。
  * @return auto 解析済み selector 情報を返します。
+ *
+ * @note 無効なセレクタは compile error になります。エラーメッセージは
+ *       throw の内容を直接表示せず "not a constant expression" になります。
+ *       各 throw 文に書かれた文字列（"NTTP CSS selector must not be empty" など）を
+ *       参考にデバッグしてください。
  */
 template <detail::fixed_string Selector>
 constexpr auto parse_selector_spec() {

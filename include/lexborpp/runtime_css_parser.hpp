@@ -43,46 +43,44 @@ struct runtime_selector_spec {
 
 // --- Runtime parsing functions (non-template) ---
 
-// Parse one simple selector into a compound
+// Parse one simple selector into a compound; returns false on parse failure.
 constexpr auto parse_runtime_simple_selector(
   std::string_view input,
   std::size_t& pos,
-  auto& compound) -> void {
+  auto& compound) -> bool {
   auto append = [&]<typename T>(T&& simple) {
     if (compound.simple_count >= compound.simples.size()) {
-      return; // too complex, stop
+      return false; // too complex
     }
     compound.simples[compound.simple_count++] = std::forward<T>(simple);
+    return true;
   };
 
   if (pos >= input.size()) {
-    return; // ended unexpectedly
+    return false; // ended unexpectedly
   }
 
   if (input[pos] == '*') {
-    append(runtime_simple_spec{.kind = selector_simple_kind::universal});
     ++pos;
-    return;
+    return append(runtime_simple_spec{.kind = selector_simple_kind::universal});
   }
 
   if (input[pos] == '#') {
     ++pos;
     auto const value = parse_name(input, pos);
     if (value.empty()) {
-      return; // id must not be empty
+      return false; // id must not be empty
     }
-    append(runtime_simple_spec{.kind = selector_simple_kind::id, .value = std::string(value)});
-    return;
+    return append(runtime_simple_spec{.kind = selector_simple_kind::id, .value = std::string(value)});
   }
 
   if (input[pos] == '.') {
     ++pos;
     auto const value = parse_name(input, pos);
     if (value.empty()) {
-      return; // class must not be empty
+      return false; // class must not be empty
     }
-    append(runtime_simple_spec{.kind = selector_simple_kind::class_name, .value = std::string(value)});
-    return;
+    return append(runtime_simple_spec{.kind = selector_simple_kind::class_name, .value = std::string(value)});
   }
 
   if (input[pos] == '[') {
@@ -90,7 +88,7 @@ constexpr auto parse_runtime_simple_selector(
     skip_spaces(input, pos);
     auto const name = parse_name(input, pos);
     if (name.empty()) {
-      return; // attribute name must not be empty
+      return false; // attribute name must not be empty
     }
     skip_spaces(input, pos);
 
@@ -116,12 +114,12 @@ constexpr auto parse_runtime_simple_selector(
         match = selector_attribute_match::substring;
         pos += 2;
       } else {
-        return; // unsupported operator
+        return false; // unsupported operator
       }
 
       skip_spaces(input, pos);
       if (pos >= input.size()) {
-        return; // attribute value missing
+        return false; // attribute value missing
       }
 
       if (input[pos] == '"' || input[pos] == '\'') {
@@ -131,49 +129,60 @@ constexpr auto parse_runtime_simple_selector(
       }
 
       if (value.empty()) {
-        return; // attribute value must not be empty
+        return false; // attribute value must not be empty
       }
       skip_spaces(input, pos);
     }
 
     if (pos >= input.size() || input[pos] != ']') {
-      return; // attribute selector must end with ']'
+      return false; // attribute selector must end with ']'
     }
     ++pos;
-    append(runtime_simple_spec{.kind = selector_simple_kind::attribute, .name = std::string(name), .value = std::string(value), .attribute_match = match});
-    return;
+    return append(runtime_simple_spec{.kind = selector_simple_kind::attribute, .name = std::string(name), .value = std::string(value), .attribute_match = match});
   }
 
   if (input[pos] == ':') {
-    return; // pseudo-classes not supported
+    // pseudo-classes not supported; consume the name to avoid infinite loop
+    ++pos;
+    parse_name(input, pos);
+    if (pos < input.size() && input[pos] == '(') {
+      ++pos;
+      for (auto depth = 1; pos < input.size() && depth > 0; ++pos) {
+        if (input[pos] == '(') ++depth;
+        else if (input[pos] == ')') --depth;
+      }
+    }
+    return false;
   }
 
   auto const value = parse_name(input, pos);
   if (value.empty()) {
-    return; // token invalid
+    return false; // token invalid
   }
-  append(runtime_simple_spec{.kind = selector_simple_kind::type, .value = std::string(value)});
+  return append(runtime_simple_spec{.kind = selector_simple_kind::type, .value = std::string(value)});
 }
 
-// Parse one compound selector
+// Parse one compound selector; returns false on parse failure.
 constexpr auto parse_runtime_compound_selector(
   std::string_view input,
   std::size_t& pos,
   auto& group,
-  selector_combinator relation) -> void {
+  selector_combinator relation) -> bool {
   if (group.compound_count >= group.compounds.size()) {
-    return; // too complex
+    return false; // too complex
   }
 
-  auto& compound = group.compounds[group.compound_count++];
+  auto& compound = group.compounds[group.compound_count];
   compound.simple_count = 0;
   compound.relation = relation;
 
   if (pos >= input.size()) {
-    return; // ended unexpectedly
+    return false; // ended unexpectedly
   }
 
-  parse_runtime_simple_selector(input, pos, compound);
+  if (not parse_runtime_simple_selector(input, pos, compound)) {
+    return false; // parse error in first simple
+  }
 
   while (pos < input.size()) {
     if (is_space(input[pos]) || input[pos] == ',' || input[pos] == '>' ||
@@ -181,15 +190,19 @@ constexpr auto parse_runtime_compound_selector(
       break;
     }
 
-    if (!is_simple_selector_start(input[pos])) {
-      return; // token invalid
+    if (not is_simple_selector_start(input[pos])) {
+      return false; // token invalid
     }
 
-    parse_runtime_simple_selector(input, pos, compound);
+    if (not parse_runtime_simple_selector(input, pos, compound)) {
+      return false;
+    }
   }
+  ++group.compound_count;
+  return true;
 }
 
-// Top-level parser
+// Top-level parser; returns empty spec on parse failure (group_count == 0).
 template <std::size_t Max>
 [[nodiscard]] constexpr auto parse_runtime_selector(
   std::string_view input) -> runtime_selector_spec<Max> {
@@ -206,12 +219,16 @@ template <std::size_t Max>
       break; // too complex, stop
     }
 
-    auto& group = result.groups[result.group_count++];
+    auto& group = result.groups[result.group_count];
     group.compound_count = 0;
 
     auto relation = selector_combinator::descendant;
     while (true) {
-      parse_runtime_compound_selector(input, pos, group, relation);
+      if (not parse_runtime_compound_selector(input, pos, group, relation)) {
+        // parse error — discard the entire result
+        result.group_count = 0;
+        return result;
+      }
 
       skip_spaces(input, pos);
       if (pos >= input.size()) break;
@@ -225,15 +242,17 @@ template <std::size_t Max>
     }
 
     if (group.compound_count == 0) break;
+    ++result.group_count;
   }
 
   return result;
 }
 
-// Convenience: auto-determine Max from input size
+// Convenience; N=12 keeps stack usage ~100KB (12³ × ~80 bytes per simple).
 [[nodiscard]] inline auto parse_runtime_selector_auto(
-  std::string_view input) -> runtime_selector_spec<8> {
-  return parse_runtime_selector<8>(input);
+  std::string_view input) -> runtime_selector_spec<12> {
+  if (input.size() > 256) return runtime_selector_spec<12>{};
+  return parse_runtime_selector<12>(input);
 }
 
 }  // namespace detail

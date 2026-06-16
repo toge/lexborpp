@@ -408,7 +408,7 @@ public:
    *
   * @param attr 開始属性です。
    */
-  attr_walker(lxb_dom_attr_t* attr = nullptr) : start(attr) { }
+  explicit attr_walker(lxb_dom_attr_t* attr) : start(attr) { }
 
   /**
    * @brief 属性列を順方向にたどる forward iterator です。

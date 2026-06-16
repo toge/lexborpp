@@ -765,3 +765,161 @@ TEST_CASE("range adapters tag id clazz attr filter expected nodes") {
     REQUIRE(none.empty());
   }
 }
+
+TEST_CASE("attribute selector match types work correctly") {
+  auto const html = R"HTML(
+    <div id="container">
+      <div id="lang-en" lang="en"></div>
+      <div id="lang-en-us" lang="en-US"></div>
+      <div id="title-main" title="main item"></div>
+      <div id="href-prefix" href="https://example.com/page"></div>
+      <div id="src-suffix" src="/images/photo.png"></div>
+      <div id="text-contains" data-text="hello world"></div>
+      <div id="dash-match" lang="en"></div>
+      <div id="equals" data-val="exact"></div>
+      <div id="exists-only" custom-attr=""></div>
+    </div>
+  )HTML";
+  auto fixture = html_document_fixture{html};
+  auto* root = fixture.document_node();
+
+  SECTION("attribute equals (=)") {
+    auto* node = lexborpp::query_selector(root, "[data-val=exact]");
+    REQUIRE(node != nullptr);
+    REQUIRE(lexborpp::get_attr_value(node, "id") == "equals");
+
+    // NTTP version
+    node = lexborpp::query_selector<"[data-val=exact]">(root);
+    REQUIRE(node != nullptr);
+    REQUIRE(lexborpp::get_attr_value(node, "id") == "equals");
+  }
+
+  SECTION("attribute includes (~=)") {
+    // "main item" should match "main" via whitespace token
+    auto* node = lexborpp::query_selector(root, "[title~=main]");
+    REQUIRE(node != nullptr);
+    REQUIRE(lexborpp::get_attr_value(node, "id") == "title-main");
+
+    node = lexborpp::query_selector<"[title~=main]">(root);
+    REQUIRE(node != nullptr);
+    REQUIRE(lexborpp::get_attr_value(node, "id") == "title-main");
+
+    // "main item" should also match "item"
+    node = lexborpp::query_selector(root, "[title~=item]");
+    REQUIRE(node != nullptr);
+    REQUIRE(lexborpp::get_attr_value(node, "id") == "title-main");
+  }
+
+  SECTION("attribute dash-prefix (|=)") {
+    // "en" matches both "lang-en" (id=lang-en, lang=en) and "dash-match" (id=dash-match, lang=en)
+    // via exact match, plus "lang-en-us" (lang=en-US) via dash-prefix.
+    auto results = lexborpp::query_selector_all(root, "[lang|=en]");
+    REQUIRE(results.size() == 3);
+
+    // First match in DOM order is "lang-en"
+    REQUIRE(lexborpp::get_attr_value(results[0], "id") == "lang-en");
+
+    auto results_nttp = lexborpp::query_selector_all<"[lang|=en]">(root);
+    REQUIRE(results_nttp.size() == 3);
+  }
+
+  SECTION("attribute prefix (^=)") {
+    auto* node = lexborpp::query_selector(root, "[href^=https]");
+    REQUIRE(node != nullptr);
+    REQUIRE(lexborpp::get_attr_value(node, "id") == "href-prefix");
+
+    node = lexborpp::query_selector<"[href^=https]">(root);
+    REQUIRE(node != nullptr);
+    REQUIRE(lexborpp::get_attr_value(node, "id") == "href-prefix");
+  }
+
+  SECTION("attribute suffix ($=)") {
+    auto* node = lexborpp::query_selector(root, "[src$=\".png\"]");
+    REQUIRE(node != nullptr);
+    REQUIRE(lexborpp::get_attr_value(node, "id") == "src-suffix");
+
+    node = lexborpp::query_selector<"[src$=\".png\"]">(root);
+    REQUIRE(node != nullptr);
+    REQUIRE(lexborpp::get_attr_value(node, "id") == "src-suffix");
+  }
+
+  SECTION("attribute substring (*=)") {
+    auto* node = lexborpp::query_selector(root, "[data-text*=world]");
+    REQUIRE(node != nullptr);
+    REQUIRE(lexborpp::get_attr_value(node, "id") == "text-contains");
+
+    node = lexborpp::query_selector<"[data-text*=world]">(root);
+    REQUIRE(node != nullptr);
+    REQUIRE(lexborpp::get_attr_value(node, "id") == "text-contains");
+  }
+
+  SECTION("attribute exists (no operator)") {
+    auto* node = lexborpp::query_selector(root, "[custom-attr]");
+    REQUIRE(node != nullptr);
+    REQUIRE(lexborpp::get_attr_value(node, "id") == "exists-only");
+
+    node = lexborpp::query_selector<"[custom-attr]">(root);
+    REQUIRE(node != nullptr);
+    REQUIRE(lexborpp::get_attr_value(node, "id") == "exists-only");
+  }
+
+  SECTION("quoted attribute value with space") {
+    auto* node = lexborpp::query_selector(root, "[data-text=\"hello world\"]");
+    REQUIRE(node != nullptr);
+    REQUIRE(lexborpp::get_attr_value(node, "id") == "text-contains");
+
+    node = lexborpp::query_selector<"[data-text=\"hello world\"]">(root);
+    REQUIRE(node != nullptr);
+    REQUIRE(lexborpp::get_attr_value(node, "id") == "text-contains");
+
+    // Single-quoted version
+    node = lexborpp::query_selector(root, "[data-text='hello world']");
+    REQUIRE(node != nullptr);
+    REQUIRE(lexborpp::get_attr_value(node, "id") == "text-contains");
+  }
+}
+
+TEST_CASE("runtime CSS parser rejects invalid selectors gracefully") {
+  auto const html = R"HTML(<div id="a"><span></span></div>)HTML";
+  auto fixture = html_document_fixture{html};
+  auto* root = fixture.document_node();
+
+  SECTION("pseudo-class returns nullptr/empty") {
+    REQUIRE(lexborpp::query_selector(root, "div:not(.foo)") == nullptr);
+    REQUIRE(lexborpp::query_selector_all(root, "div:not(.foo)").empty());
+
+    REQUIRE(lexborpp::query_selector(root, ":first-child") == nullptr);
+    REQUIRE(lexborpp::query_selector_all(root, ":first-child").empty());
+  }
+
+  SECTION("pseudo-class with parentheses") {
+    REQUIRE(lexborpp::query_selector(root, "div:nth-child(2)") == nullptr);
+    REQUIRE(lexborpp::query_selector_all(root, "div:nth-child(2)").empty());
+  }
+
+  SECTION("malformed attribute selector") {
+    REQUIRE(lexborpp::query_selector(root, "[id") == nullptr);
+    REQUIRE(lexborpp::query_selector_all(root, "[id").empty());
+  }
+
+  SECTION("empty id selector") {
+    REQUIRE(lexborpp::query_selector(root, "div#") == nullptr);
+    REQUIRE(lexborpp::query_selector_all(root, "div#").empty());
+  }
+
+  SECTION("empty class selector") {
+    REQUIRE(lexborpp::query_selector(root, "div.") == nullptr);
+    REQUIRE(lexborpp::query_selector_all(root, "div.").empty());
+  }
+
+  SECTION("selector with unsupported operator after equals") {
+    REQUIRE(lexborpp::query_selector(root, "[id!=x]") == nullptr);
+    REQUIRE(lexborpp::query_selector_all(root, "[id!=x]").empty());
+  }
+
+  SECTION("valid selectors should still work") {
+    auto* node = lexborpp::query_selector(root, "div#a span");
+    REQUIRE(node != nullptr);
+  }
+}
+

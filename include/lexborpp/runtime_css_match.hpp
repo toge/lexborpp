@@ -47,6 +47,7 @@ template <std::size_t Max>
   lxb_dom_node_t* node,
   runtime_compound_spec<Max> const& compound) noexcept -> bool {
   if (node == nullptr || is_non_element_node(node)) return false;
+  if (compound.simple_count == 0) return false;
   for (auto i = std::size_t{0}; i < compound.simple_count; ++i) {
     if (not match_runtime_simple(node, compound.simples[i])) return false;
   }
