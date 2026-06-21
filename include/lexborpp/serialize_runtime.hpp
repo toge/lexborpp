@@ -10,6 +10,7 @@
 #include "lexbor/dom/dom.h"
 
 #include "lexborpp/runtime_css_match.hpp"
+#include "lexborpp/document_id_index.hpp"
 
 namespace lexborpp {
 namespace detail {
@@ -66,6 +67,26 @@ inline auto serialize_callback(const lxb_char_t* data, size_t len, void* ctx) no
  */
 [[nodiscard]] auto inline query_selector_all(lxb_dom_node_t* node, std::string_view selector) -> std::vector<lxb_dom_node_t*> {
   return detail::query_selector_all_runtime(node, selector);
+}
+
+/**
+ * @brief ID 逆引きインデックスを利用して CSS セレクタにマッチする最初の要素を返します。
+ */
+[[nodiscard]] auto inline query_selector(
+  lxb_dom_node_t* node,
+  std::string_view selector,
+  document_id_index const& index) -> lxb_dom_node_t* {
+  return detail::query_selector_runtime(node, selector, index);
+}
+
+/**
+ * @brief ID 逆引きインデックスを利用して CSS セレクタにマッチする全要素を返します。
+ */
+[[nodiscard]] auto inline query_selector_all(
+  lxb_dom_node_t* node,
+  std::string_view selector,
+  document_id_index const& index) -> std::vector<lxb_dom_node_t*> {
+  return detail::query_selector_all_runtime(node, selector, index);
 }
 }  // namespace lexborpp
 

@@ -923,3 +923,148 @@ TEST_CASE("runtime CSS parser rejects invalid selectors gracefully") {
   }
 }
 
+TEST_CASE("document_id_index") {
+  auto fixture = html_document_fixture{kHtml};
+  auto* root = fixture.document_node();
+
+  SECTION("build index from root node") {
+    auto index = lexborpp::document_id_index{root};
+    REQUIRE_FALSE(index.empty());
+    REQUIRE(index.size() > 0);
+  }
+
+  SECTION("find by id") {
+    auto index = lexborpp::document_id_index{root};
+    auto* node = index.find("leaf-b");
+    REQUIRE(node != nullptr);
+    REQUIRE(lexborpp::get_attr_value(node, "id") == "leaf-b");
+  }
+
+  SECTION("find non-existent id returns nullptr") {
+    auto index = lexborpp::document_id_index{root};
+    REQUIRE(index.find("non-existent") == nullptr);
+  }
+
+  SECTION("contains checks") {
+    auto index = lexborpp::document_id_index{root};
+    REQUIRE(index.contains("leaf-b"));
+    REQUIRE(index.contains("branch-a"));
+    REQUIRE(index.contains("container"));
+    REQUIRE_FALSE(index.contains("non-existent"));
+  }
+
+  SECTION("build from body node includes subtree ids") {
+    auto index = lexborpp::document_id_index{fixture.body_node()};
+    REQUIRE_FALSE(index.empty());
+    REQUIRE(index.contains("body"));
+  }
+
+  SECTION("rebuild updates index") {
+    auto index = lexborpp::document_id_index{root};
+    auto const old_size = index.size();
+    index.rebuild(root);
+    REQUIRE(index.size() == old_size);
+  }
+}
+
+TEST_CASE("document_id_index with NTTP query_selector") {
+  auto fixture = html_document_fixture{kHtml};
+  auto* root = fixture.document_node();
+  auto index = lexborpp::document_id_index{root};
+
+  SECTION("single id selector finds correct node") {
+    auto* expected = lexborpp::get_element_by_id(root, "leaf-b");
+    REQUIRE(expected != nullptr);
+
+    auto* node = lexborpp::query_selector<"#leaf-b">(root, index);
+    REQUIRE(node != nullptr);
+    REQUIRE(node == expected);
+  }
+
+  SECTION("complex selector with id on rightmost compound") {
+    auto* expected = lexborpp::get_element_by_id(root, "leaf-b");
+    REQUIRE(expected != nullptr);
+
+    auto* node = lexborpp::query_selector<"section#tree strong#leaf-b">(root, index);
+    REQUIRE(node != nullptr);
+    REQUIRE(node == expected);
+  }
+
+  SECTION("non-id selector falls back to walker") {
+    auto* node = lexborpp::query_selector<"div.alpha">(root, index);
+    REQUIRE(node != nullptr);
+    REQUIRE(lexborpp::get_attr_value(node, "id") == "container");
+  }
+
+  SECTION("non-matching id returns nullptr") {
+    auto* node = lexborpp::query_selector<"#non-existent-id">(root, index);
+    REQUIRE(node == nullptr);
+  }
+
+  SECTION("empty selector returns nullptr") {
+    auto* node = lexborpp::query_selector<"">(root, index);
+    REQUIRE(node == nullptr);
+  }
+
+  SECTION("query_selector_all with single id selector") {
+    auto results = lexborpp::query_selector_all<"#leaf-b">(root, index);
+    REQUIRE(results.size() == 1);
+    REQUIRE(lexborpp::get_attr_value(results[0], "id") == "leaf-b");
+  }
+
+  SECTION("query_selector_all with complex selector falls back to walker") {
+    auto results = lexborpp::query_selector_all<"p">(root, index);
+    REQUIRE(results.size() >= 2);
+  }
+}
+
+TEST_CASE("document_id_index with runtime query_selector") {
+  auto fixture = html_document_fixture{kHtml};
+  auto* root = fixture.document_node();
+  auto index = lexborpp::document_id_index{root};
+
+  SECTION("single id selector") {
+    auto* node = lexborpp::query_selector(root, "#leaf-b", index);
+    REQUIRE(node != nullptr);
+    REQUIRE(lexborpp::get_attr_value(node, "id") == "leaf-b");
+  }
+
+  SECTION("complex selector with id") {
+    auto* node = lexborpp::query_selector(root, "section#tree strong#leaf-b", index);
+    REQUIRE(node != nullptr);
+    REQUIRE(lexborpp::get_attr_value(node, "id") == "leaf-b");
+  }
+
+  SECTION("non-matching id returns nullptr") {
+    auto* node = lexborpp::query_selector(root, "#non-existent", index);
+    REQUIRE(node == nullptr);
+  }
+
+  SECTION("empty selector returns nullptr") {
+    auto* node = lexborpp::query_selector(root, "", index);
+    REQUIRE(node == nullptr);
+  }
+
+  SECTION("nullptr node returns nullptr") {
+    auto* node = lexborpp::query_selector(nullptr, "#leaf-b", index);
+    REQUIRE(node == nullptr);
+  }
+
+  SECTION("query_selector_all with single id") {
+    auto results = lexborpp::query_selector_all(root, "#leaf-b", index);
+    REQUIRE(results.size() == 1);
+    REQUIRE(lexborpp::get_attr_value(results[0], "id") == "leaf-b");
+  }
+
+  SECTION("query_selector_all with complex selector") {
+    auto results = lexborpp::query_selector_all(root, "p", index);
+    REQUIRE(results.size() >= 2);
+  }
+
+  SECTION("results match between indexed and non-indexed queries") {
+    auto* with_index = lexborpp::query_selector(root, "section#tree strong#leaf-b", index);
+    auto* without = lexborpp::query_selector(root, "section#tree strong#leaf-b");
+    REQUIRE(with_index == without);
+  }
+}
+

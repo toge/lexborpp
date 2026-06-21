@@ -10,6 +10,7 @@
 
 #include "lexborpp/core.hpp"
 #include "lexborpp/nttp_parser.hpp"
+#include "lexborpp/document_id_index.hpp"
 
 namespace lexborpp {
 
@@ -173,6 +174,70 @@ template <detail::fixed_string Selector>
     }
   }
   return result;
+}
+
+// --- Compile-time id prefilter extraction ---
+template <detail::fixed_string Selector>
+constexpr auto compiled_id_prefilter() -> std::string_view {
+  constexpr auto& spec = compiled_selector_v<Selector>;
+  if constexpr (spec.group_count == 0) {
+    return {};
+  } else {
+    constexpr auto& g = spec.groups[0];
+    if constexpr (g.compound_count == 0) {
+      return {};
+    } else {
+      constexpr auto& c = g.compounds[g.compound_count - 1];
+      for (auto i = std::size_t{}; i < c.simple_count; ++i) {
+        if (c.simples[i].kind == selector_simple_kind::id) {
+          return c.simples[i].value;
+        }
+      }
+      return {};
+    }
+  }
+}
+
+// --- Query implementations with document_id_index ---
+template <detail::fixed_string Selector>
+[[nodiscard]] auto inline query_selector_impl(
+  lxb_dom_node_t* node,
+  document_id_index const& index) -> lxb_dom_node_t* {
+  if (node == nullptr) {
+    return nullptr;
+  }
+  constexpr auto id_value = compiled_id_prefilter<Selector>();
+  if constexpr (!id_value.empty() && compiled_selector_v<Selector>.group_count == 1) {
+    auto* found = index.find(id_value);
+    if (found != nullptr && match_selector_compiled<Selector>(found)) {
+      return found;
+    }
+    return nullptr;
+  } else {
+    return query_selector_impl<Selector>(node);
+  }
+}
+
+template <detail::fixed_string Selector>
+[[nodiscard]] auto inline query_selector_all_impl(
+  lxb_dom_node_t* node,
+  document_id_index const& index) -> std::vector<lxb_dom_node_t*> {
+  if (node == nullptr) {
+    return {};
+  }
+  constexpr auto id_value = compiled_id_prefilter<Selector>();
+  if constexpr (!id_value.empty() &&
+                compiled_selector_v<Selector>.group_count == 1 &&
+                compiled_selector_v<Selector>.groups[0].compound_count == 1) {
+    // Single compound with id: at most 1 result
+    auto* found = index.find(id_value);
+    if (found != nullptr && match_selector_compiled<Selector>(found)) {
+      return {found};
+    }
+    return {};
+  } else {
+    return query_selector_all_impl<Selector>(node);
+  }
 }
 
 }  // namespace detail

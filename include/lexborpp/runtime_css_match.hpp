@@ -9,6 +9,7 @@
 #include "lexborpp/core.hpp"
 #include "lexborpp/nttp_parser.hpp"
 #include "lexborpp/runtime_css_parser.hpp"
+#include "lexborpp/document_id_index.hpp"
 
 namespace lexborpp {
 namespace detail {
@@ -137,6 +138,66 @@ template <std::size_t Max>
     if (match_runtime_selector(current, spec)) result.push_back(current);
   }
   return result;
+}
+
+// --- Runtime id prefilter helpers ---
+template <std::size_t Max>
+[[nodiscard]] auto runtime_get_id_prefilter(
+  runtime_selector_spec<Max> const& spec) -> std::string const* {
+  if (spec.group_count == 0) return nullptr;
+  auto const& g = spec.groups[0];
+  if (g.compound_count == 0) return nullptr;
+  auto const& c = g.compounds[g.compound_count - 1];
+  for (auto i = std::size_t{}; i < c.simple_count; ++i) {
+    if (c.simples[i].kind == selector_simple_kind::id) {
+      return &c.simples[i].value;
+    }
+  }
+  return nullptr;
+}
+
+// query_selector_runtime with index
+[[nodiscard]] inline auto query_selector_runtime(
+  lxb_dom_node_t* node,
+  std::string_view selector,
+  document_id_index const& index) -> lxb_dom_node_t* {
+  if (node == nullptr || selector.empty()) return nullptr;
+
+  auto spec = parse_runtime_selector_auto(selector);
+  if (spec.group_count == 0) return nullptr;
+
+  auto const* id_value = runtime_get_id_prefilter(spec);
+  if (id_value != nullptr && spec.group_count == 1) {
+    auto* found = index.find(*id_value);
+    if (found != nullptr && match_runtime_selector(found, spec)) {
+      return found;
+    }
+    return nullptr;
+  }
+
+  return query_selector_runtime(node, selector);
+}
+
+// query_selector_all_runtime with index
+[[nodiscard]] inline auto query_selector_all_runtime(
+  lxb_dom_node_t* node,
+  std::string_view selector,
+  document_id_index const& index) -> std::vector<lxb_dom_node_t*> {
+  if (node == nullptr || selector.empty()) return {};
+
+  auto spec = parse_runtime_selector_auto(selector);
+  if (spec.group_count == 0) return {};
+
+  auto const* id_value = runtime_get_id_prefilter(spec);
+  if (id_value != nullptr && spec.group_count == 1 && spec.groups[0].compound_count == 1) {
+    auto* found = index.find(*id_value);
+    if (found != nullptr && match_runtime_selector(found, spec)) {
+      return {found};
+    }
+    return {};
+  }
+
+  return query_selector_all_runtime(node, selector);
 }
 
 }  // namespace detail
