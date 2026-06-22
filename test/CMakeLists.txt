@@ -8,6 +8,9 @@ add_executable(all_test ${test_src})
 
 target_link_libraries(all_test PRIVATE Catch2::Catch2WithMain lexborpp::lexborpp)
 target_include_directories(all_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+if(LEXBOR_INCLUDE_DIR)
+    target_include_directories(all_test PRIVATE "${LEXBOR_INCLUDE_DIR}")
+endif()
 target_compile_features(all_test PRIVATE cxx_std_23)
 
 add_test(NAME all_test COMMAND all_test -r junit)

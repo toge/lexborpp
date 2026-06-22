@@ -36,8 +36,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 find_package(lexbor CONFIG QUIET)
 
-# lexbor::lexbor がなければ自力で検出する (vcpkg の lexbor-config.cmake は
-# lexbor::lexbor_static を提供するため、lexbor::lexbor はここで補完する)
+# 1. lexbor::lexbor を確保する (vcpkg は lexbor::lexbor_static のみ提供するため補完)
 if(NOT TARGET lexbor::lexbor)
     find_path(LEXBOR_INCLUDE_DIR NAMES lexbor/html/parser.h REQUIRED)
     find_library(LEXBOR_LIBRARY NAMES lexbor_static lexbor REQUIRED)
@@ -47,10 +46,19 @@ if(NOT TARGET lexbor::lexbor)
     target_link_libraries(lexbor::lexbor INTERFACE "${LEXBOR_LIBRARY}")
 endif()
 
-# lexbor の include パスをキャッシュ (VS generator での伝搬問題対策で各ターゲットに
-# 直接追加するために使う)
-if(TARGET lexbor::lexbor AND NOT LEXBOR_INCLUDE_DIR)
-    get_target_property(LEXBOR_INCLUDE_DIR lexbor::lexbor INTERFACE_INCLUDE_DIRECTORIES)
+# 2. LEXBOR_INCLUDE_DIR を必ず解決する (経路: find_path cache → target property → find_path)
+#    VS generator では INTERFACE 伝搬が効かないことがあるため、各実ターゲットに
+#    直接追加するために LEXBOR_INCLUDE_DIR が必要。
+if(NOT LEXBOR_INCLUDE_DIR)
+    if(TARGET lexbor::lexbor)
+        get_target_property(_lexbor_inc_tmp lexbor::lexbor INTERFACE_INCLUDE_DIRECTORIES)
+        if(_lexbor_inc_tmp AND NOT _lexbor_inc_tmp STREQUAL "_lexbor_inc_tmp-NOTFOUND")
+            set(LEXBOR_INCLUDE_DIR "${_lexbor_inc_tmp}")
+        endif()
+    endif()
+    if(NOT LEXBOR_INCLUDE_DIR)
+        find_path(LEXBOR_INCLUDE_DIR NAMES lexbor/html/parser.h)
+    endif()
 endif()
 
 add_library(lexborpp INTERFACE)
