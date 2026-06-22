@@ -41,11 +41,18 @@ if(NOT TARGET lexbor::lexbor)
     find_path(LEXBOR_INCLUDE_DIR NAMES lexbor/html/parser.h REQUIRED)
     find_library(LEXBOR_LIBRARY NAMES lexbor_static lexbor REQUIRED)
 
-    add_library(lexbor::lexbor UNKNOWN IMPORTED)
-    set_target_properties(lexbor::lexbor PROPERTIES
-        IMPORTED_LOCATION "${LEXBOR_LIBRARY}"
-        INTERFACE_INCLUDE_DIRECTORIES "${LEXBOR_INCLUDE_DIR}"
-    )
+    add_library(lexbor::lexbor INTERFACE IMPORTED)
+    target_include_directories(lexbor::lexbor INTERFACE "${LEXBOR_INCLUDE_DIR}")
+    target_link_libraries(lexbor::lexbor INTERFACE "${LEXBOR_LIBRARY}")
+endif()
+
+# lexbor::lexbor の include dir を lexborpp の interface に直接追加
+# (VS generator で INTERFACE IMPORTED の伝搬が期待通り動作しない場合の保険)
+if(TARGET lexbor::lexbor)
+    get_target_property(_lexbor_inc lexbor::lexbor INTERFACE_INCLUDE_DIRECTORIES)
+    if(_lexbor_inc AND NOT _lexbor_inc STREQUAL "_lexbor_inc-NOTFOUND")
+        set(LEXBOR_INCLUDE_DIR "${_lexbor_inc}")
+    endif()
 endif()
 
 add_library(lexborpp INTERFACE)
@@ -56,6 +63,9 @@ target_include_directories(lexborpp
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
+if(LEXBOR_INCLUDE_DIR)
+    target_include_directories(lexborpp INTERFACE "$<BUILD_INTERFACE:${LEXBOR_INCLUDE_DIR}>")
+endif()
 target_link_libraries(lexborpp INTERFACE lexbor::lexbor)
 target_compile_features(lexborpp INTERFACE cxx_std_23)
 
