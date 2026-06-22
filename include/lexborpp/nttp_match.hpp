@@ -26,28 +26,31 @@ inline constexpr auto compiled_selector_v = parse_selector_spec<Selector>();
 template <detail::fixed_string Selector, std::size_t GI, std::size_t CompoundI, std::size_t SimpleI>
 [[nodiscard]] constexpr auto match_simple(
   lxb_dom_node_t* node) noexcept -> bool {
-  constexpr auto& spec = compiled_selector_v<Selector>.groups[GI].compounds[CompoundI].simples[SimpleI];
+  constexpr auto& spec = compiled_selector_v<Selector>;
+  constexpr auto& g = spec.groups[GI];
+  constexpr auto& c = spec.compounds[g.compound_start + CompoundI];
+  constexpr auto& s = spec.simples[c.simple_start + SimpleI];
   using kind = selector_simple_kind;
 
-  if constexpr (spec.kind == kind::universal) {
+  if constexpr (s.kind == kind::universal) {
     return not is_non_element_node(node);
   } else {
     if (node == nullptr || is_non_element_node(node)) {
       return false;
     }
 
-    if constexpr (spec.kind == kind::type) {
-      return iequals(node_qualified_name(node), spec.value);
-    } else if constexpr (spec.kind == kind::id) {
-      return get_attr_value(node, "id") == spec.value;
-    } else if constexpr (spec.kind == kind::class_name) {
-      return has_class(node, spec.value);
-    } else if constexpr (spec.kind == kind::attribute) {
-      auto const value = get_attr_value(node, spec.name);
+    if constexpr (s.kind == kind::type) {
+      return iequals(node_qualified_name(node), s.value);
+    } else if constexpr (s.kind == kind::id) {
+      return get_attr_value(node, "id") == s.value;
+    } else if constexpr (s.kind == kind::class_name) {
+      return has_class(node, s.value);
+    } else if constexpr (s.kind == kind::attribute) {
+      auto const value = get_attr_value(node, s.name);
       if (not value.has_value()) {
         return false;
       }
-      return match_attribute(*value, spec.value, spec.attribute_match);
+      return match_attribute(*value, s.value, s.attribute_match);
     }
   }
 }
@@ -63,7 +66,10 @@ template <detail::fixed_string Selector, std::size_t GI, std::size_t CompoundI, 
 template <detail::fixed_string Selector, std::size_t GI, std::size_t CompoundI>
 [[nodiscard]] constexpr auto match_compound(
   lxb_dom_node_t* node) noexcept -> bool {
-  constexpr auto simple_count = compiled_selector_v<Selector>.groups[GI].compounds[CompoundI].simple_count;
+  constexpr auto& spec = compiled_selector_v<Selector>;
+  constexpr auto& g = spec.groups[GI];
+  constexpr auto& c = spec.compounds[g.compound_start + CompoundI];
+  constexpr auto simple_count = c.simple_count;
   return match_compound_impl<Selector, GI, CompoundI>(
     node, std::make_index_sequence<simple_count>{});
 }
@@ -85,7 +91,10 @@ template <detail::fixed_string Selector, std::size_t GI, std::size_t I>
     return false;
   }
 
-  constexpr auto relation = compiled_selector_v<Selector>.groups[GI].compounds[I].relation;
+  constexpr auto& spec = compiled_selector_v<Selector>;
+  constexpr auto& g = spec.groups[GI];
+  constexpr auto& c = spec.compounds[g.compound_start + I];
+  constexpr auto relation = c.relation;
 
   if constexpr (relation == selector_combinator::child) {
     return match_compound_chain<Selector, GI, I - 1>(parent_element(node));
@@ -113,7 +122,8 @@ template <detail::fixed_string Selector, std::size_t GI, std::size_t I>
 template <detail::fixed_string Selector, std::size_t GI>
 [[nodiscard]] constexpr auto match_group(
   lxb_dom_node_t* node) noexcept -> bool {
-  constexpr auto compound_count = compiled_selector_v<Selector>.groups[GI].compound_count;
+  constexpr auto& g = compiled_selector_v<Selector>.groups[GI];
+  constexpr auto compound_count = g.compound_count;
   if constexpr (compound_count == 0) {
     return false;
   } else {
@@ -187,10 +197,10 @@ constexpr auto compiled_id_prefilter() -> std::string_view {
     if constexpr (g.compound_count == 0) {
       return {};
     } else {
-      constexpr auto& c = g.compounds[g.compound_count - 1];
+      constexpr auto& c = spec.compounds[g.compound_start + g.compound_count - 1];
       for (auto i = std::size_t{}; i < c.simple_count; ++i) {
-        if (c.simples[i].kind == selector_simple_kind::id) {
-          return c.simples[i].value;
+        if (spec.simples[c.simple_start + i].kind == selector_simple_kind::id) {
+          return spec.simples[c.simple_start + i].value;
         }
       }
       return {};

@@ -172,30 +172,36 @@ struct selector_simple_spec {
 };
 
 /**
- * @brief 連続する単一 selector をまとめた compound selector を保持します。
+ * @brief フラット配列中の compound selector の範囲を保持します。
  */
-template <std::size_t Max>
-struct selector_compound_spec {
-  std::array<selector_simple_spec, Max> simples{};
+struct selector_compound_info {
+  std::size_t simple_start{};
   std::size_t simple_count{};
   selector_combinator relation{selector_combinator::descendant};
 };
 
 /**
- * @brief カンマ区切りの selector group を保持します。
+ * @brief フラット配列中の selector group の範囲を保持します。
  */
-template <std::size_t Max>
-struct selector_group_spec {
-  std::array<selector_compound_spec<Max>, Max> compounds{};
+struct selector_group_info {
+  std::size_t compound_start{};
   std::size_t compound_count{};
 };
 
 /**
- * @brief selector 全体の解析結果を保持します。
+ * @brief selector 全体の解析結果をフラット配列で保持します。
+ *
+ * groups → compounds → simples の三段階をフラットにし、
+ * 各 group/compound が自身の子要素の範囲を offset + count で参照します。
+ * これにより O(N³) の compile-time メモリ消費を O(N) に抑えます。
  */
 template <std::size_t Max>
 struct selector_spec {
-  std::array<selector_group_spec<Max>, Max> groups{};
+  std::array<selector_simple_spec, Max> simples{};
+  std::size_t simple_count{};
+  std::array<selector_compound_info, Max> compounds{};
+  std::size_t compound_count{};
+  std::array<selector_group_info, Max> groups{};
   std::size_t group_count{};
 };
 
@@ -294,19 +300,6 @@ struct selector_spec {
          (!is_name_terminator(c) && c != '>');
 }
 
-template <detail::fixed_string Selector, std::size_t Max>
-constexpr auto parse_simple_selector(
-  std::string_view input,
-  std::size_t& pos,
-  selector_compound_spec<Max>& compound) -> void;
-
-template <detail::fixed_string Selector, std::size_t Max>
-constexpr auto parse_compound_selector(
-  std::string_view input,
-  std::size_t& pos,
-  selector_group_spec<Max>& group,
-  selector_combinator relation) -> void;
-
 /**
  * @brief CSS セレクタ文字列をコンパイル時に解析します。
  *
@@ -331,16 +324,30 @@ constexpr auto parse_selector_spec() {
   }
 
   while (pos < input.size()) {
-    if (result.group_count >= result.groups.size()) {
+    if (result.group_count >= max) {
       throw "NTTP CSS selector is too complex";
     }
 
-    auto& group = result.groups[result.group_count++];
+    auto& group = result.groups[result.group_count];
+    group.compound_start = result.compound_count;
     group.compound_count = 0;
 
     auto relation = selector_combinator::descendant;
     while (true) {
-      parse_compound_selector<Selector, max>(input, pos, group, relation);
+      if (result.compound_count >= max) {
+        throw "NTTP CSS selector is too complex";
+      }
+
+      auto& compound = result.compounds[result.compound_count];
+      auto const simple_start = result.simple_count;
+      compound.simple_start = simple_start;
+      compound.relation = relation;
+
+      parse_compound_elements<Selector, max>(input, pos, result);
+
+      compound.simple_count = result.simple_count - simple_start;
+      result.compound_count++;
+      group.compound_count++;
 
       skip_spaces(input, pos);
       if (pos >= input.size()) {
@@ -388,6 +395,8 @@ constexpr auto parse_selector_spec() {
     if (group.compound_count == 0) {
       throw "NTTP CSS selector group must not be empty";
     }
+
+    result.group_count++;
   }
 
   return result;
@@ -400,12 +409,12 @@ template <detail::fixed_string Selector, std::size_t Max>
 constexpr auto parse_simple_selector(
   std::string_view input,
   std::size_t& pos,
-  selector_compound_spec<Max>& compound) -> void {
-  auto append = [&]<typename T>(T&& simple) {
-    if (compound.simple_count >= compound.simples.size()) {
+  selector_spec<Max>& result) -> void {
+  auto append = [&](auto&& simple) {
+    if (result.simple_count >= result.simples.size()) {
       throw "NTTP CSS selector is too complex";
     }
-    compound.simples[compound.simple_count++] = std::forward<T>(simple);
+    result.simples[result.simple_count++] = std::forward<decltype(simple)>(simple);
   };
 
   if (pos >= input.size()) {
@@ -509,27 +518,21 @@ constexpr auto parse_simple_selector(
 }
 
 /**
- * @brief compound selector の列を解析して group に追加します。
+ * @brief compound selector 内の simple selector 列を解析します。
+ *
+ * 最初の !is_name_terminator または combinator/comma までを
+ * 連続する simple selector として解析し、フラットな simples 配列に追加します。
  */
 template <detail::fixed_string Selector, std::size_t Max>
-constexpr auto parse_compound_selector(
+constexpr auto parse_compound_elements(
   std::string_view input,
   std::size_t& pos,
-  selector_group_spec<Max>& group,
-  selector_combinator relation) -> void {
-  if (group.compound_count >= group.compounds.size()) {
-    throw "NTTP CSS selector is too complex";
-  }
-
-  auto& compound = group.compounds[group.compound_count++];
-  compound.simple_count = 0;
-  compound.relation = relation;
-
+  selector_spec<Max>& result) -> void {
   if (pos >= input.size()) {
     throw "NTTP CSS selector ended unexpectedly";
   }
 
-  parse_simple_selector<Selector, Max>(input, pos, compound);
+  parse_simple_selector<Selector, Max>(input, pos, result);
 
   while (pos < input.size()) {
     if (is_space(input[pos]) || input[pos] == ',' || input[pos] == '>' ||
@@ -541,7 +544,7 @@ constexpr auto parse_compound_selector(
       throw "NTTP CSS selector token is invalid";
     }
 
-    parse_simple_selector<Selector, Max>(input, pos, compound);
+    parse_simple_selector<Selector, Max>(input, pos, result);
   }
 }
 }  // namespace detail
