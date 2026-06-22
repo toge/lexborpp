@@ -36,7 +36,8 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 find_package(lexbor CONFIG QUIET)
 
-# lexbor::lexbor_staticなどbuild typeで変動するので工夫する
+# lexbor::lexbor がなければ自力で検出する (vcpkg の lexbor-config.cmake は
+# lexbor::lexbor_static を提供するため、lexbor::lexbor はここで補完する)
 if(NOT TARGET lexbor::lexbor)
     find_path(LEXBOR_INCLUDE_DIR NAMES lexbor/html/parser.h REQUIRED)
     find_library(LEXBOR_LIBRARY NAMES lexbor_static lexbor REQUIRED)
@@ -46,13 +47,10 @@ if(NOT TARGET lexbor::lexbor)
     target_link_libraries(lexbor::lexbor INTERFACE "${LEXBOR_LIBRARY}")
 endif()
 
-# lexbor::lexbor の include dir を lexborpp の interface に直接追加
-# (VS generator で INTERFACE IMPORTED の伝搬が期待通り動作しない場合の保険)
-if(TARGET lexbor::lexbor)
-    get_target_property(_lexbor_inc lexbor::lexbor INTERFACE_INCLUDE_DIRECTORIES)
-    if(_lexbor_inc AND NOT _lexbor_inc STREQUAL "_lexbor_inc-NOTFOUND")
-        set(LEXBOR_INCLUDE_DIR "${_lexbor_inc}")
-    endif()
+# lexbor の include パスをキャッシュ (VS generator での伝搬問題対策で各ターゲットに
+# 直接追加するために使う)
+if(TARGET lexbor::lexbor AND NOT LEXBOR_INCLUDE_DIR)
+    get_target_property(LEXBOR_INCLUDE_DIR lexbor::lexbor INTERFACE_INCLUDE_DIRECTORIES)
 endif()
 
 add_library(lexborpp INTERFACE)
@@ -63,9 +61,6 @@ target_include_directories(lexborpp
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
-if(LEXBOR_INCLUDE_DIR)
-    target_include_directories(lexborpp INTERFACE "$<BUILD_INTERFACE:${LEXBOR_INCLUDE_DIR}>")
-endif()
 target_link_libraries(lexborpp INTERFACE lexbor::lexbor)
 target_compile_features(lexborpp INTERFACE cxx_std_23)
 
@@ -107,4 +102,10 @@ if(BUILD_BENCH)
     add_executable(bench_css_selector benchmark/bench_css_selector.cpp)
     target_link_libraries(bench_css_selector PRIVATE lexborpp::lexborpp)
     target_compile_features(bench_css_selector PRIVATE cxx_std_23)
+
+    # VS generator fallback: lexbor include を直接追加 (INTERFACE IMPORTED 経由の伝搬が
+    # 期待通り動作しない場合があるため)
+    if(LEXBOR_INCLUDE_DIR)
+        target_include_directories(bench_css_selector PRIVATE "${LEXBOR_INCLUDE_DIR}")
+    endif()
 endif()
