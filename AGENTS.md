@@ -29,15 +29,16 @@
 
 | パス | 役割 |
 | --- | --- |
-| `include/lexborpp.hpp` | 公開ヘッダ。**umbrella** で、`include/lexborpp/` 配下の 8 ファイル (`core.hpp`, `tag_name.hpp`, `serialize_runtime.hpp`, `nttp_parser.hpp`, `nttp_match.hpp`, `nttp_range_adapters.hpp`, `nttp_query.hpp`, `ranges_specializations.hpp`) を再 include する。利用者向けの include パスは `<lexborpp.hpp>` のまま。 |
+| `include/lexborpp.hpp` | 公開ヘッダ。**umbrella** で、`include/lexborpp/` 配下の 11 ファイル (`core.hpp`, `tag_name.hpp`, `serialize_runtime.hpp`, `nttp_parser.hpp`, `nttp_match.hpp`, `nttp_range_adapters.hpp`, `nttp_query.hpp`, `ranges_specializations.hpp`, `document_id_index.hpp`, `runtime_css_parser.hpp`, `runtime_css_match.hpp`) を再 include する。利用者向けの include パスは `<lexborpp.hpp>` のまま。 |
 | `CMakeLists.txt` | ルート。`lexborpp::lexborpp` (INTERFACE) を export |
 | `cmake/lexborppConfig.cmake.in` | `find_package(lexborpp CONFIG)` 用のテンプレ |
 | `test/test_lexborpp.cpp` | Catch2 テスト本体 |
 | `test/test_support.hpp` | `html_document_fixture` (RAII で Lexbor ドキュメントを保持) |
 | `test/CMakeLists.txt` | `file(GLOB test_*.cpp)`、ターゲット名は `all_test` |
+| `benchmark/bench_css_selector.cpp` | NTTP / Runtime / Naive の比較ベンチマーク |
+| `benchmark/BENCHMARK.md` | ベンチマーク計測結果 |
 | `vcpkg.json` | 依存: `lexbor`, `catch2` |
 | `build.sh` / `test.sh` | vcpkg / conan 経由のラッパ |
-| `docs/superpowers/` | 設計メモ・実装計画 (人間向け、編集不要) |
 | `context7.json` | context7 公開用。**API キーなので取り扱い注意** |
 
 ## API の癖 (README 以上の細目)

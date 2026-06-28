@@ -598,7 +598,7 @@ auto inline get_first_element_by_class(lxb_dom_node_t* node, std::string_view cl
 /**
  * @brief 全子孫テキストノードを結合して取得します。
  *
- * @param node 対象のノードです。
+ * @param node 対象のノード。`const` ポインタも可。
  * @param sep 各テキストノードの間に挿入するセパレータ（デフォルトは空文字列）です。
  * @return std::string 結合されたテキスト文字列を返します。
  *
@@ -606,6 +606,9 @@ auto inline get_first_element_by_class(lxb_dom_node_t* node, std::string_view cl
  * get_first_child_text  → 直下の最初のテキストノードのみ
  * get_all_children_text → 直下のテキストノードのみ（孫以下除外）
  * get_deep_text         → 全子孫テキストノード（本関数）
+ *
+ * 同じノードに対して繰り返し呼び出しても安全です (内部で取得したバッファは
+ * 呼び出し毎に解放されます)。
  *
  * sep が空文字列の場合は Lexbor ネイティブ API (lxb_dom_node_text_content) を使用し、
  * それ以外の場合は node_walker を用いてテキストを結合する。

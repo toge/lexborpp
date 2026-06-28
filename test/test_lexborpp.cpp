@@ -632,6 +632,36 @@ TEST_CASE("get_deep_text collects all descendant text nodes") {
     REQUIRE(lexborpp::get_deep_text(node) == "Hello World!");
     REQUIRE(lexborpp::get_deep_text(node, "|") == "Hello| |World|!");
   }
+
+  SECTION("Accepts const node pointer without breaking constness contract") {
+    auto const html = R"HTML(<p id="target">Hello <b>World</b></p>)HTML";
+    auto fixture = html_document_fixture{html};
+    auto* node = fixture.by_id("target");
+    REQUIRE(node != nullptr);
+
+    // The signature is `lxb_dom_node_t const*`; callers must be able to pass
+    // a pointer-to-const without explicit casts. The implementation may still
+    // call back into the document allocator for the native path; that is a
+    // document-scoped side effect (document's arena), not a mutation of the
+    // node itself. This test pins the contract.
+    auto const* const_node = static_cast<lxb_dom_node_t const*>(node);
+    REQUIRE(lexborpp::get_deep_text(const_node) == "Hello World");
+  }
+
+  SECTION("Repeated calls on the same node yield stable results") {
+    auto const html = R"HTML(<div id="target">Repeatable</div>)HTML";
+    auto fixture = html_document_fixture{html};
+    auto* node = fixture.by_id("target");
+    REQUIRE(node != nullptr);
+
+    // The native path borrows from the document's arena and frees it before
+    // returning. Calling repeatedly must not corrupt the result or leak into
+    // a use-after-free on the next call.
+    constexpr auto kRepeatCalls = 32;
+    for (auto i = 0; i < kRepeatCalls; ++i) {
+      REQUIRE(lexborpp::get_deep_text(node) == "Repeatable");
+    }
+  }
 }
 
 TEST_CASE("node_walker traverses descendants depth first") {

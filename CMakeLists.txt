@@ -3,6 +3,7 @@ project(lexborpp VERSION 0.0.1 LANGUAGES CXX)
 
 include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
+include(CTest)
 
 option(BUILD_TEST "Build tests" ON)
 option(BUILD_BENCH "Build benchmarks" ON)
