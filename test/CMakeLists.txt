@@ -11,4 +11,8 @@ if(LEXBOR_INCLUDE_DIR)
 endif()
 target_compile_features(all_test PRIVATE cxx_std_23)
 
+if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
+    target_link_options(all_test PRIVATE "-sSTACK_SIZE=5242880")
+endif()
+
 add_test(NAME all_test COMMAND all_test -r junit)
