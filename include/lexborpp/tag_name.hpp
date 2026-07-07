@@ -11,6 +11,9 @@ namespace lexborpp {
  *
  * @param tag_id 変換対象のタグ ID です。
  * @return auto 対応するタグ名を返します。未知の場合は空文字列ビューを返します。
+ *
+ * @note このマッピングは Lexbor のタグ列挙 (`LXB_TAG_*`) と手動で同期しています。
+ *       新しいタグが Lexbor に追加された場合はこの switch も更新が必要です。
  */
 auto inline tag_name(lxb_tag_id_t const tag_id) {
   using namespace std::string_view_literals;

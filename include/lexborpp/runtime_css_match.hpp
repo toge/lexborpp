@@ -36,8 +36,8 @@ namespace detail {
     if (not value.has_value()) return false;
     return match_attribute(*value, simple.value, simple.attribute_match);
   }
-  case selector_simple_kind::universal:
-    return true;
+  default:
+    return false;
   }
   return false;
 }

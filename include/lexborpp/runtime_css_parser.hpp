@@ -249,6 +249,9 @@ template <std::size_t Max>
 }
 
 // Convenience; N=12 keeps stack usage ~100KB (12³ × ~80 bytes per simple).
+// Selectors longer than 256 characters are rejected (returning an empty spec,
+// which makes query_selector* report "no match"). This bound exists to keep
+// stack usage bounded; raise it only if you need longer selectors.
 [[nodiscard]] inline auto parse_runtime_selector_auto(
   std::string_view input) -> runtime_selector_spec<12> {
   if (input.size() > 256) return runtime_selector_spec<12>{};

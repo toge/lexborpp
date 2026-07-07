@@ -23,11 +23,18 @@ if (MSVC)
 endif()
 
 ## optimization
+option(LEXBORPP_NATIVE_ARCH "Build with -march=native / /Ox for maximum speed (not portable across machines)" OFF)
 if (CMAKE_COMPILER_IS_GNUCXX)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -march=native")
+    if (LEXBORPP_NATIVE_ARCH)
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -march=native")
+    else()
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O2")
+    endif()
 endif()
 if (MSVC)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /Ox")
+    if (LEXBORPP_NATIVE_ARCH)
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /Ox")
+    endif()
 endif()
 
 ## other flag

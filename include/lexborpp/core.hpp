@@ -612,6 +612,11 @@ auto inline get_first_element_by_class(lxb_dom_node_t* node, std::string_view cl
  *
  * sep が空文字列の場合は Lexbor ネイティブ API (lxb_dom_node_text_content) を使用し、
  * それ以外の場合は node_walker を用いてテキストを結合する。
+ *
+ * 注意: sep を指定した場合、セパレータは「各テキストノードの間」に挿入されるため、
+ * 隣接するテキストノードの境界で sep が現れます。例: `<p>Hello <b>World</b></p>` に
+ * 対して sep=" " を与えると `"Hello  World"`（単語間に元々あった空白 + sep で 2 つ）
+ * になります。単語間の空白を正規化したい場合は呼び出し側で trim/collapse してください。
  */
 [[nodiscard]] auto inline get_deep_text(lxb_dom_node_t const* node, std::string_view sep = "") -> std::string {
   if (node == nullptr) {

@@ -4,6 +4,7 @@
 #include <array>
 #include <cstddef>
 #include <ranges>
+#include <stdexcept>
 #include <string_view>
 
 #include "lexbor/dom/dom.h"
@@ -320,12 +321,12 @@ constexpr auto parse_selector_spec() {
 
   skip_spaces(input, pos);
   if (pos >= input.size()) {
-    throw "NTTP CSS selector must not be empty";
+    throw std::runtime_error{"NTTP CSS selector must not be empty"};
   }
 
   while (pos < input.size()) {
     if (result.group_count >= max) {
-      throw "NTTP CSS selector is too complex";
+      throw std::runtime_error{"NTTP CSS selector is too complex"};
     }
 
     auto& group = result.groups[result.group_count];
@@ -335,7 +336,7 @@ constexpr auto parse_selector_spec() {
     auto relation = selector_combinator::descendant;
     while (true) {
       if (result.compound_count >= max) {
-        throw "NTTP CSS selector is too complex";
+        throw std::runtime_error{"NTTP CSS selector is too complex"};
       }
 
       auto& compound = result.compounds[result.compound_count];
@@ -358,7 +359,7 @@ constexpr auto parse_selector_spec() {
         ++pos;
         skip_spaces(input, pos);
         if (pos >= input.size()) {
-          throw "NTTP CSS selector must not end with a comma";
+          throw std::runtime_error{"NTTP CSS selector must not end with a comma"};
         }
         break;
       }
@@ -389,11 +390,11 @@ constexpr auto parse_selector_spec() {
         continue;
       }
 
-      throw "NTTP CSS selector token is invalid";
+      throw std::runtime_error{"NTTP CSS selector token is invalid"};
     }
 
     if (group.compound_count == 0) {
-      throw "NTTP CSS selector group must not be empty";
+      throw std::runtime_error{"NTTP CSS selector group must not be empty"};
     }
 
     result.group_count++;
@@ -412,13 +413,13 @@ constexpr auto parse_simple_selector(
   selector_spec<Max>& result) -> void {
   auto append = [&](auto&& simple) {
     if (result.simple_count >= result.simples.size()) {
-      throw "NTTP CSS selector is too complex";
+      throw std::runtime_error{"NTTP CSS selector is too complex"};
     }
     result.simples[result.simple_count++] = std::forward<decltype(simple)>(simple);
   };
 
   if (pos >= input.size()) {
-    throw "NTTP CSS selector ended unexpectedly";
+    throw std::runtime_error{"NTTP CSS selector ended unexpectedly"};
   }
 
   if (input[pos] == '*') {
@@ -431,7 +432,7 @@ constexpr auto parse_simple_selector(
     ++pos;
     auto const value = parse_name(input, pos);
     if (value.empty()) {
-      throw "NTTP CSS selector id must not be empty";
+      throw std::runtime_error{"NTTP CSS selector id must not be empty"};
     }
     append(selector_simple_spec{.kind = selector_simple_kind::id, .value = value});
     return;
@@ -441,7 +442,7 @@ constexpr auto parse_simple_selector(
     ++pos;
     auto const value = parse_name(input, pos);
     if (value.empty()) {
-      throw "NTTP CSS selector class must not be empty";
+      throw std::runtime_error{"NTTP CSS selector class must not be empty"};
     }
     append(selector_simple_spec{.kind = selector_simple_kind::class_name, .value = value});
     return;
@@ -452,7 +453,7 @@ constexpr auto parse_simple_selector(
     skip_spaces(input, pos);
     auto const name = parse_name(input, pos);
     if (name.empty()) {
-      throw "NTTP CSS selector attribute name must not be empty";
+      throw std::runtime_error{"NTTP CSS selector attribute name must not be empty"};
     }
     skip_spaces(input, pos);
 
@@ -478,12 +479,12 @@ constexpr auto parse_simple_selector(
         match = selector_attribute_match::substring;
         pos += 2;
       } else {
-        throw "NTTP CSS selector attribute operator is unsupported";
+        throw std::runtime_error{"NTTP CSS selector attribute operator is unsupported"};
       }
 
       skip_spaces(input, pos);
       if (pos >= input.size()) {
-        throw "NTTP CSS selector attribute value is missing";
+        throw std::runtime_error{"NTTP CSS selector attribute value is missing"};
       }
 
       if (input[pos] == '"' || input[pos] == '\'') {
@@ -493,13 +494,13 @@ constexpr auto parse_simple_selector(
       }
 
       if (value.empty()) {
-        throw "NTTP CSS selector attribute value must not be empty";
+        throw std::runtime_error{"NTTP CSS selector attribute value must not be empty"};
       }
       skip_spaces(input, pos);
     }
 
     if (pos >= input.size() || input[pos] != ']') {
-      throw "NTTP CSS selector attribute selector must end with ']'";
+      throw std::runtime_error{"NTTP CSS selector attribute selector must end with ']'"};
     }
     ++pos;
     append(selector_simple_spec{.kind = selector_simple_kind::attribute, .name = name, .value = value, .attribute_match = match});
@@ -507,12 +508,12 @@ constexpr auto parse_simple_selector(
   }
 
   if (input[pos] == ':') {
-    throw "NTTP CSS selector pseudo-classes are not supported yet";
+    throw std::runtime_error{"NTTP CSS selector pseudo-classes are not supported yet"};
   }
 
   auto const value = parse_name(input, pos);
   if (value.empty()) {
-    throw "NTTP CSS selector token is invalid";
+    throw std::runtime_error{"NTTP CSS selector token is invalid"};
   }
   append(selector_simple_spec{.kind = selector_simple_kind::type, .value = value});
 }
@@ -529,7 +530,7 @@ constexpr auto parse_compound_elements(
   std::size_t& pos,
   selector_spec<Max>& result) -> void {
   if (pos >= input.size()) {
-    throw "NTTP CSS selector ended unexpectedly";
+    throw std::runtime_error{"NTTP CSS selector ended unexpectedly"};
   }
 
   parse_simple_selector<Selector, Max>(input, pos, result);
@@ -541,7 +542,7 @@ constexpr auto parse_compound_elements(
     }
 
     if (not is_simple_selector_start(input[pos])) {
-      throw "NTTP CSS selector token is invalid";
+      throw std::runtime_error{"NTTP CSS selector token is invalid"};
     }
 
     parse_simple_selector<Selector, Max>(input, pos, result);

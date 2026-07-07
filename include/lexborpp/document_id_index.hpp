@@ -20,14 +20,12 @@ public:
   }
 
   [[nodiscard]] lxb_dom_node_t* find(std::string_view id) const noexcept {
-    auto key = std::string(id);
-    auto it = map_.find(key);
+    auto it = map_.find(id);
     return it != map_.end() ? it->second : nullptr;
   }
 
   [[nodiscard]] bool contains(std::string_view id) const noexcept {
-    auto key = std::string(id);
-    return map_.contains(key);
+    return map_.contains(id);
   }
 
   [[nodiscard]] bool empty() const noexcept { return map_.empty(); }
@@ -53,7 +51,16 @@ private:
     }
   }
 
-  std::unordered_map<std::string, lxb_dom_node_t*> map_;
+  // Transparent hash/equality enables lookup by std::string_view without
+  // constructing a temporary std::string (avoids a per-lookup heap allocation).
+  struct transparent_string_hash {
+    using is_transparent = void;
+    auto operator()(std::string_view sv) const noexcept -> std::size_t {
+      return std::hash<std::string_view>{}(sv);
+    }
+  };
+  std::unordered_map<std::string, lxb_dom_node_t*,
+                     transparent_string_hash, std::equal_to<>> map_;
 };
 
 }  // namespace lexborpp
