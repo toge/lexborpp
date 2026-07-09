@@ -17,9 +17,6 @@ namespace lexborpp {
 namespace detail {
 
 template <detail::fixed_string Selector>
-inline constexpr auto selector_storage_capacity_v = Selector.view().empty() ? std::size_t{1} : Selector.view().size();
-
-template <detail::fixed_string Selector>
 inline constexpr auto compiled_selector_v = parse_selector_spec<Selector>();
 
 // --- Match a single simple selector (compile-time kind dispatch) ---

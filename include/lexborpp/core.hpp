@@ -102,6 +102,22 @@ auto constexpr inline is_non_element_node(lxb_dom_node_t const* node) noexcept -
 
 // --- Walkers ---
 
+// ボイラープレートとなるイテレータ型エイリアスを一括定義するマクロ。
+#define LEXBORPP_ITERATOR_TYPEDEFS(Value)                      \
+  using iterator_concept  = std::forward_iterator_tag;         \
+  using iterator_category = std::forward_iterator_tag;         \
+  using value_type        = Value;                             \
+  using difference_type   = std::ptrdiff_t;                    \
+  using pointer           = Value*;                            \
+  using reference         = Value&;                            \
+  auto operator++(int) noexcept -> iterator {                  \
+    auto temp = *this; ++*this; return temp;                    \
+  }                                                            \
+  auto operator==(iterator const& rhs) const noexcept          \
+    -> bool { return current == rhs.current; }                 \
+  auto operator*() const noexcept                              \
+    -> Value const& { return current; }
+
 /**
  * @brief 指定ノード以下を深さ優先で巡回する Range View です。
  */
@@ -109,100 +125,32 @@ class node_walker : public std::ranges::view_interface<node_walker> {
 public:
   using value_type = lxb_dom_node_t*;
 
-  /**
-   * @brief 巡回開始ノードを指定して初期化します。
-   *
-  * @param node 巡回開始ノードです。
-   */
-  explicit node_walker(lxb_dom_node_t* node = nullptr) : start(node) { }
+  explicit node_walker(lxb_dom_node_t* node = nullptr) noexcept : start(node) { }
 
-  /**
-   * @brief 深さ優先巡回用の forward iterator です。
-   */
   class iterator {
   public:
-    using iterator_concept = std::forward_iterator_tag;
-    using iterator_category = std::forward_iterator_tag;
-    using value_type = lxb_dom_node_t*;
-    using difference_type = std::ptrdiff_t;
-    using pointer = lxb_dom_node_t**;
-    using reference = lxb_dom_node_t*&;
+    LEXBORPP_ITERATOR_TYPEDEFS(lxb_dom_node_t*)
 
-    /**
-     * @brief イテレータを初期化します。
-     *
-    * @param node 巡回の起点ノードです。
-    * @param end 現在位置です。
-     */
-    iterator(lxb_dom_node_t* node = nullptr, lxb_dom_node_t* end = nullptr) : start(node), current(end) { }
+    iterator(lxb_dom_node_t* begin_node = nullptr, lxb_dom_node_t* cur = nullptr) noexcept
+      : start(begin_node), current(cur) { }
 
-    /**
-     * @brief 次のノードへ進めます。
-     *
-    * @return iterator& 自身への参照を返します。
-     */
-    iterator& operator++() noexcept {
-      if (current == nullptr) {
-        return *this;
-      }
-
-      if (current->first_child != nullptr) {
-        current = current->first_child;
-        return *this;
-      }
-
-      while (current != nullptr && current != start && current->next == nullptr) {
-        current = current->parent;
-      }
-
-      if (current == start || current == nullptr) {
-        current = nullptr;
-      } else {
-        current = current->next;
-      }
-
+    auto operator++() noexcept -> iterator& {
+      if (current == nullptr) return *this;
+      if (current->first_child != nullptr) { current = current->first_child; return *this; }
+      while (current != nullptr && current != start && current->next == nullptr) { current = current->parent; }
+      current = (current == start || current == nullptr) ? nullptr : current->next;
       return *this;
     }
-
-    /**
-     * @brief 現在位置を返してから次へ進めます。
-     *
-    * @return iterator 進行前のイテレータを返します。
-     */
-    iterator operator++(int) noexcept {
-      auto temp = *this;
-      ++*this;
-      return temp;
-    }
-
-    /**
-     * @brief ほかのイテレータと等しいか比較します。
-     *
-    * @param rhs 比較対象です。
-    * @return auto 現在位置が同じ場合に true を返します。
-     */
-    auto operator==(iterator const &rhs) const noexcept { return current == rhs.current; }
-
-    /**
-     * @brief 現在ノードを参照します。
-     *
-    * @return lxb_dom_node_t* const& 現在ノードを返します。
-     */
-    lxb_dom_node_t* const& operator*() const noexcept { return current; }
 
   private:
     lxb_dom_node_t* start;
     lxb_dom_node_t* current;
   };
 
-  /** @brief 先頭イテレータを返します。 */
-  [[nodiscard]] iterator begin() noexcept { return iterator{start, start}; }
-  /** @brief 先頭イテレータを返します。 */
-  [[nodiscard]] iterator begin() const noexcept { return iterator{start, start}; }
-  /** @brief 終端イテレータを返します。 */
-  [[nodiscard]] iterator end() noexcept { return iterator{start, nullptr}; }
-  /** @brief 終端イテレータを返します。 */
-  [[nodiscard]] iterator end() const noexcept { return iterator{start, nullptr}; }
+  [[nodiscard]] iterator begin() noexcept       { return {start, start}; }
+  [[nodiscard]] iterator begin() const noexcept { return {start, start}; }
+  [[nodiscard]] iterator end() noexcept         { return {start, nullptr}; }
+  [[nodiscard]] iterator end() const noexcept   { return {start, nullptr}; }
 
 private:
   lxb_dom_node_t* start;
@@ -215,82 +163,27 @@ class node_sibling_walker : public std::ranges::view_interface<node_sibling_walk
 public:
   using value_type = lxb_dom_node_t*;
 
-  /**
-   * @brief 巡回開始ノードを指定して初期化します。
-   *
-  * @param node 巡回開始ノードです。
-   */
-  explicit node_sibling_walker(lxb_dom_node_t* node = nullptr) : start(node) { }
+  explicit node_sibling_walker(lxb_dom_node_t* node = nullptr) noexcept : start(node) { }
 
-  /**
-   * @brief 兄弟ノードを順方向にたどる forward iterator です。
-   */
   class iterator {
   public:
-    using iterator_concept = std::forward_iterator_tag;
-    using iterator_category = std::forward_iterator_tag;
-    using value_type = lxb_dom_node_t*;
-    using difference_type = std::ptrdiff_t;
-    using pointer = lxb_dom_node_t**;
-    using reference = lxb_dom_node_t*&;
+    LEXBORPP_ITERATOR_TYPEDEFS(lxb_dom_node_t*)
 
-    /**
-     * @brief イテレータを初期化します。
-     *
-    * @param node 現在ノードです。
-     */
-    iterator(lxb_dom_node_t* node = nullptr) : current(node) { }
+    explicit iterator(lxb_dom_node_t* node = nullptr) noexcept : current(node) { }
 
-    /**
-     * @brief 次の兄弟ノードへ進めます。
-     *
-    * @return iterator& 自身への参照を返します。
-     */
-    iterator& operator++() noexcept {
-      if (current != nullptr) {
-        current = current->next;
-      }
+    auto operator++() noexcept -> iterator& {
+      if (current != nullptr) current = current->next;
       return *this;
     }
-
-    /**
-     * @brief 現在位置を返してから次へ進めます。
-     *
-    * @return iterator 進行前のイテレータを返します。
-     */
-    iterator operator++(int) noexcept {
-      auto temp = *this;
-      ++*this;
-      return temp;
-    }
-
-    /**
-     * @brief ほかのイテレータと等しいか比較します。
-     *
-    * @param rhs 比較対象です。
-    * @return auto 現在位置が同じ場合に true を返します。
-     */
-    auto operator==(iterator const &rhs) const noexcept { return current == rhs.current; }
-
-    /**
-     * @brief 現在ノードを参照します。
-     *
-    * @return lxb_dom_node_t* const& 現在ノードを返します。
-     */
-    lxb_dom_node_t* const& operator*() const noexcept { return current; }
 
   private:
     lxb_dom_node_t* current;
   };
 
-  /** @brief 先頭イテレータを返します。 */
-  [[nodiscard]] iterator begin() noexcept { return iterator{start}; }
-  /** @brief 先頭イテレータを返します。 */
+  [[nodiscard]] iterator begin() noexcept       { return iterator{start}; }
   [[nodiscard]] iterator begin() const noexcept { return iterator{start}; }
-  /** @brief 終端イテレータを返します。 */
-  [[nodiscard]] iterator end() noexcept { return iterator{nullptr}; }
-  /** @brief 終端イテレータを返します。 */
-  [[nodiscard]] iterator end() const noexcept { return iterator{nullptr}; }
+  [[nodiscard]] iterator end() noexcept         { return iterator{}; }
+  [[nodiscard]] iterator end() const noexcept   { return iterator{}; }
 
 private:
   lxb_dom_node_t* start;
@@ -303,83 +196,28 @@ class node_prev_sibling_walker : public std::ranges::view_interface<node_prev_si
 public:
   using value_type = lxb_dom_node_t*;
 
-  /**
-   * @brief 指定ノードの直前兄弟から巡回を開始します。
-   *
-  * @param node 基準ノードです。
-   */
-  explicit node_prev_sibling_walker(lxb_dom_node_t* node = nullptr)
+  explicit node_prev_sibling_walker(lxb_dom_node_t* node = nullptr) noexcept
     : start(node ? node->prev : nullptr) { }
 
-  /**
-   * @brief 兄弟ノードを逆方向にたどる forward iterator です。
-   */
   class iterator {
   public:
-    using iterator_concept = std::forward_iterator_tag;
-    using iterator_category = std::forward_iterator_tag;
-    using value_type = lxb_dom_node_t*;
-    using difference_type = std::ptrdiff_t;
-    using pointer = lxb_dom_node_t**;
-    using reference = lxb_dom_node_t*&;
+    LEXBORPP_ITERATOR_TYPEDEFS(lxb_dom_node_t*)
 
-    /**
-     * @brief イテレータを初期化します。
-     *
-    * @param node 現在ノードです。
-     */
-    iterator(lxb_dom_node_t* node = nullptr) : current(node) { }
+    explicit iterator(lxb_dom_node_t* node = nullptr) noexcept : current(node) { }
 
-    /**
-     * @brief 前の兄弟ノードへ進めます。
-     *
-    * @return iterator& 自身への参照を返します。
-     */
-    iterator& operator++() noexcept {
-      if (current != nullptr) {
-        current = current->prev;
-      }
+    auto operator++() noexcept -> iterator& {
+      if (current != nullptr) current = current->prev;
       return *this;
     }
-
-    /**
-     * @brief 現在位置を返してから前へ進めます。
-     *
-    * @return iterator 進行前のイテレータを返します。
-     */
-    iterator operator++(int) noexcept {
-      auto temp = *this;
-      ++*this;
-      return temp;
-    }
-
-    /**
-     * @brief ほかのイテレータと等しいか比較します。
-     *
-    * @param rhs 比較対象です。
-    * @return auto 現在位置が同じ場合に true を返します。
-     */
-    auto operator==(iterator const &rhs) const noexcept { return current == rhs.current; }
-
-    /**
-     * @brief 現在ノードを参照します。
-     *
-    * @return lxb_dom_node_t* const& 現在ノードを返します。
-     */
-    lxb_dom_node_t* const& operator*() const noexcept { return current; }
 
   private:
     lxb_dom_node_t* current;
   };
 
-  /** @brief 先頭イテレータを返します。 */
-  [[nodiscard]] iterator begin() noexcept { return iterator{start}; }
-  /** @brief 先頭イテレータを返します。 */
+  [[nodiscard]] iterator begin() noexcept       { return iterator{start}; }
   [[nodiscard]] iterator begin() const noexcept { return iterator{start}; }
-  /** @brief 終端イテレータを返します。 */
-  [[nodiscard]] iterator end() noexcept { return iterator{nullptr}; }
-  /** @brief 終端イテレータを返します。 */
-  [[nodiscard]] iterator end() const noexcept { return iterator{nullptr}; }
+  [[nodiscard]] iterator end() noexcept         { return iterator{}; }
+  [[nodiscard]] iterator end() const noexcept   { return iterator{}; }
 
 private:
   lxb_dom_node_t* start;
@@ -392,99 +230,80 @@ class attr_walker : public std::ranges::view_interface<attr_walker> {
 public:
   using value_type = lxb_dom_attr_t*;
 
-  /**
-   * @brief ノードから属性巡回を初期化します。
-   *
-  * @param node 対象ノードです。
-   */
-  explicit attr_walker(lxb_dom_node_t* node) : start(nullptr) {
+  explicit attr_walker(lxb_dom_node_t* node) noexcept : start(nullptr) {
     if (node != nullptr and not is_non_element_node(node)) {
       start = lxb_dom_element_first_attribute(lxb_dom_interface_element(node));
     }
   }
 
-  /**
-   * @brief 属性ノードから属性巡回を初期化します。
-   *
-  * @param attr 開始属性です。
-   */
-  explicit attr_walker(lxb_dom_attr_t* attr) : start(attr) { }
+  explicit attr_walker(lxb_dom_attr_t* attr) noexcept : start(attr) { }
 
-  /**
-   * @brief 属性列を順方向にたどる forward iterator です。
-   */
   class iterator {
   public:
-    using iterator_concept = std::forward_iterator_tag;
-    using iterator_category = std::forward_iterator_tag;
-    using value_type = lxb_dom_attr_t*;
-    using difference_type = std::ptrdiff_t;
-    using pointer = lxb_dom_attr_t**;
-    using reference = lxb_dom_attr_t*&;
+    LEXBORPP_ITERATOR_TYPEDEFS(lxb_dom_attr_t*)
 
-    /**
-     * @brief イテレータを初期化します。
-     *
-    * @param node 現在属性です。
-     */
-    iterator(lxb_dom_attr_t* node = nullptr) : current(node) { }
+    explicit iterator(lxb_dom_attr_t* node = nullptr) noexcept : current(node) { }
 
-    /**
-     * @brief 次の属性へ進めます。
-     *
-    * @return iterator& 自身への参照を返します。
-     */
-    iterator& operator++() noexcept {
-      if (current != nullptr) {
-        current = lxb_dom_element_next_attribute(current);
-      }
+    auto operator++() noexcept -> iterator& {
+      if (current != nullptr) current = lxb_dom_element_next_attribute(current);
       return *this;
     }
-
-    /**
-     * @brief 現在位置を返してから次へ進めます。
-     *
-    * @return iterator 進行前のイテレータを返します。
-     */
-    iterator operator++(int) noexcept {
-      auto temp = *this;
-      ++*this;
-      return temp;
-    }
-
-    /**
-     * @brief ほかのイテレータと等しいか比較します。
-     *
-    * @param rhs 比較対象です。
-    * @return auto 現在位置が同じ場合に true を返します。
-     */
-    auto operator==(iterator const &rhs) const noexcept { return current == rhs.current; }
-
-    /**
-     * @brief 現在属性を参照します。
-     *
-    * @return lxb_dom_attr_t* const& 現在属性を返します。
-     */
-    lxb_dom_attr_t* const& operator*() const noexcept { return current; }
 
   private:
     lxb_dom_attr_t* current;
   };
 
-  /** @brief 先頭イテレータを返します。 */
-  [[nodiscard]] iterator begin() noexcept { return iterator{start}; }
-  /** @brief 先頭イテレータを返します。 */
+  [[nodiscard]] iterator begin() noexcept       { return iterator{start}; }
   [[nodiscard]] iterator begin() const noexcept { return iterator{start}; }
-  /** @brief 終端イテレータを返します。 */
-  [[nodiscard]] iterator end() noexcept { return iterator{nullptr}; }
-  /** @brief 終端イテレータを返します。 */
-  [[nodiscard]] iterator end() const noexcept { return iterator{nullptr}; }
+  [[nodiscard]] iterator end() noexcept         { return iterator{}; }
+  [[nodiscard]] iterator end() const noexcept   { return iterator{}; }
 
 private:
   lxb_dom_attr_t* start;
 };
 
 // --- Core API ---
+
+/**
+ * @brief 要素から指定属性の値を取得します。
+ *
+ * @param node 対象ノードです。
+ * @param attr_name 属性名です。
+ * @return std::optional<std::string_view> 属性値を返します。存在しない場合は std::nullopt を返します。
+ */
+auto inline get_attr_value(lxb_dom_node_t* node, std::string_view attr_name) noexcept -> std::optional<std::string_view> {
+  if (node == nullptr or is_non_element_node(node)) {
+    return std::nullopt;
+  }
+
+  auto* const element = lxb_dom_interface_element(node);
+  auto attr_val_len = size_t{};
+
+  if (attr_name == "id") {
+    auto const attr_val_data = lxb_dom_element_id(element, &attr_val_len);
+    if (attr_val_data != nullptr) {
+      return std::string_view{reinterpret_cast<const char*>(attr_val_data), attr_val_len};
+    }
+    return std::nullopt;
+  }
+
+  if (attr_name == "class") {
+    auto const attr_val_data = lxb_dom_element_class(element, &attr_val_len);
+    if (attr_val_data != nullptr) {
+      return std::string_view{reinterpret_cast<const char*>(attr_val_data), attr_val_len};
+    }
+    return std::nullopt;
+  }
+
+  auto* attr = lxb_dom_element_attr_by_name(element, reinterpret_cast<lxb_char_t const*>(attr_name.data()), attr_name.size());
+  if (attr != nullptr) {
+    auto const attr_val_data = lxb_dom_attr_value(attr, &attr_val_len);
+    if (attr_val_data != nullptr) {
+      return std::string_view{reinterpret_cast<const char*>(attr_val_data), attr_val_len};
+    }
+  }
+  return std::nullopt;
+}
 
 /**
  * @brief ノードが指定されたクラスを持っているか確認します。
@@ -553,24 +372,11 @@ auto inline get_first_element_by_class(lxb_dom_node_t* node, std::string_view cl
     return nullptr;
   }
 
-  auto const text_walker = +[](lxb_dom_node_t* node, void* ctx) noexcept {
-    if (is_non_element_node(node)) {
-      return LEXBOR_ACTION_OK;
-    }
-
-    auto& [target, result] = *reinterpret_cast<std::pair<std::string_view, lxb_dom_node*>*>(ctx);
-    auto attr_len = size_t{};
-    auto const attr = lxb_dom_element_get_attribute(lxb_dom_interface_element(node), reinterpret_cast<const lxb_char_t*>("class"), 5, &attr_len);
-    if (attr != nullptr and target == std::string_view{reinterpret_cast<const char*>(attr), attr_len}) {
-      result = node;
-      return LEXBOR_ACTION_STOP;
-    }
-    return LEXBOR_ACTION_OK;
-  };
-
-  auto target = std::pair<std::string_view, lxb_dom_node*>{class_name, nullptr};
-  lxb_dom_node_simple_walk(node, text_walker, &target);
-  return target.second;
+  auto walker = node_walker{node};
+  auto const it = std::ranges::find_if(walker, [&](lxb_dom_node_t* n) noexcept {
+    return not is_non_element_node(n) && get_attr_value(n, "class") == class_name;
+  });
+  return it != std::ranges::end(walker) ? *it : nullptr;
 }
 
 /**
@@ -793,66 +599,11 @@ auto inline get_element_by_id(lxb_dom_node_t* node, std::string_view id_name) no
     return nullptr;
   }
 
-  auto const text_walker = +[](lxb_dom_node_t* node, void* ctx) noexcept {
-    if (is_non_element_node(node)) {
-      return LEXBOR_ACTION_OK;
-    }
-
-    auto& [target_id, result] = *reinterpret_cast<std::pair<std::string_view, lxb_dom_node*>*>(ctx);
-    auto const element        = lxb_dom_interface_element(node);
-    auto       attr_len       = size_t{};
-    auto const attr           = lxb_dom_element_get_attribute(element, (const lxb_char_t*)"id", 2, &attr_len);
-    if (attr != nullptr and target_id == std::string_view{reinterpret_cast<const char*>(attr), attr_len}) {
-      result = node;
-      return LEXBOR_ACTION_STOP;
-    }
-    return LEXBOR_ACTION_OK;
-  };
-
-  auto target = std::pair<std::string_view const, lxb_dom_node*>{id_name, nullptr};
-  lxb_dom_node_simple_walk(node, text_walker, &target);
-  return target.second;
-}
-
-/**
- * @brief 要素から指定属性の値を取得します。
- *
- * @param node 対象ノードです。
- * @param attr_name 属性名です。
- * @return std::optional<std::string_view> 属性値を返します。存在しない場合は std::nullopt を返します。
- */
-auto inline get_attr_value(lxb_dom_node_t* node, std::string_view attr_name) noexcept -> std::optional<std::string_view> {
-  if (node == nullptr or is_non_element_node(node)) {
-    return std::nullopt;
-  }
-
-  auto* const element = lxb_dom_interface_element(node);
-  auto attr_val_len = size_t{};
-
-  if (attr_name == "id") {
-    auto const attr_val_data = lxb_dom_element_id(element, &attr_val_len);
-    if (attr_val_data != nullptr) {
-      return std::string_view{reinterpret_cast<const char*>(attr_val_data), attr_val_len};
-    }
-    return std::nullopt;
-  }
-
-  if (attr_name == "class") {
-    auto const attr_val_data = lxb_dom_element_class(element, &attr_val_len);
-    if (attr_val_data != nullptr) {
-      return std::string_view{reinterpret_cast<const char*>(attr_val_data), attr_val_len};
-    }
-    return std::nullopt;
-  }
-
-  auto* attr = lxb_dom_element_attr_by_name(element, reinterpret_cast<lxb_char_t const*>(attr_name.data()), attr_name.size());
-  if (attr != nullptr) {
-    auto const attr_val_data = lxb_dom_attr_value(attr, &attr_val_len);
-    if (attr_val_data != nullptr) {
-      return std::string_view{reinterpret_cast<const char*>(attr_val_data), attr_val_len};
-    }
-  }
-  return std::nullopt;
+  auto walker = node_walker{node};
+  auto const it = std::ranges::find_if(walker, [&](lxb_dom_node_t* n) noexcept {
+    return not is_non_element_node(n) && get_attr_value(n, "id") == id_name;
+  });
+  return it != std::ranges::end(walker) ? *it : nullptr;
 }
 
 /**
@@ -879,36 +630,10 @@ auto inline get_first_child_text(lxb_dom_node_t* node) noexcept -> std::optional
  * @brief 直下のすべてのテキスト子ノードを連結して取得します。
  *
  * @param node 対象ノードです。
+ * @param sep 各テキストの間に挿入する区切り文字（デフォルトは空文字列）です。
  * @return std::optional<std::string> 連結文字列を返します。テキスト子が無い場合は std::nullopt を返します。
  */
-auto inline get_all_children_text(lxb_dom_node_t* node) noexcept -> std::optional<std::string> {
-  if (node == nullptr) {
-    return std::nullopt;
-  }
-
-  auto result    = std::string{};
-  auto find_text = false;
-  for (node = lxb_dom_node_first_child(node); node != nullptr; node = lxb_dom_node_next(node)) {
-    if (node->type == LXB_DOM_NODE_TYPE_TEXT) {
-      auto const data = lxb_dom_interface_character_data(node);
-      find_text = true;
-      result.append(reinterpret_cast<const char*>(data->data.data), data->data.length);
-    }
-  }
-  if (not find_text) {
-    return std::nullopt;
-  }
-  return result;
-}
-
-/**
- * @brief 直下のすべてのテキスト子ノードを区切り文字付きで連結して取得します。
- *
- * @param node 対象ノードです。
- * @param sep 各テキストの間に挿入する区切り文字です。
- * @return std::optional<std::string> 連結文字列を返します。テキスト子が無い場合は std::nullopt を返します。
- */
-auto inline get_all_children_text(lxb_dom_node_t* node, std::string_view const sep) noexcept -> std::optional<std::string> {
+auto inline get_all_children_text(lxb_dom_node_t* node, std::string_view const sep = "") noexcept -> std::optional<std::string> {
   if (node == nullptr) {
     return std::nullopt;
   }
@@ -944,18 +669,9 @@ auto inline get_following_element_by_op(lxb_dom_node_t* node, Op op) noexcept ->
   if (node == nullptr) {
     return nullptr;
   }
-  auto const text_walker = +[](lxb_dom_node_t* node, void* ctx) noexcept {
-    auto& [op, result] = *reinterpret_cast<std::pair<Op&, lxb_dom_node*>*>(ctx);
-    if (op(node)) {
-      result = node;
-      return LEXBOR_ACTION_STOP;
-    }
-    return LEXBOR_ACTION_OK;
-  };
-
-  auto target = std::pair<Op&, lxb_dom_node*>{op, nullptr};
-  lxb_dom_node_simple_walk(node, text_walker, &target);
-  return target.second;
+  auto walker = node_walker{node};
+  auto const it = std::ranges::find_if(walker, [&](lxb_dom_node_t* n) noexcept { return op(n); });
+  return it != std::ranges::end(walker) ? *it : nullptr;
 }
 
 /**
