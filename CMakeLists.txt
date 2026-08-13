@@ -42,6 +42,16 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+# C++26 を優先し、コンパイラが未対応なら C++23 にフォールバック。
+# LEXBORPP_CXX_STD はこのリポジトリ内のターゲット (テスト/ベンチ) に使い、
+# ライブラリの INTERFACE 要件はヘッダが実際に必要とする最低水準 (cxx_std_23)
+# に保つ (find_package 経由の利用者が過剰な要件で壊れないようにする)。
+if ("cxx_std_26" IN_LIST CMAKE_CXX_COMPILE_FEATURES)
+    set(LEXBORPP_CXX_STD cxx_std_26)
+else()
+    set(LEXBORPP_CXX_STD cxx_std_23)
+endif()
+
 find_package(lexbor CONFIG QUIET)
 
 # 1. lexbor::lexbor を確保する (vcpkg は lexbor::lexbor_static のみ提供するため補完)
@@ -117,7 +127,7 @@ endif()
 if(BUILD_BENCH)
     add_executable(bench_css_selector benchmark/bench_css_selector.cpp)
     target_link_libraries(bench_css_selector PRIVATE lexborpp::lexborpp)
-    target_compile_features(bench_css_selector PRIVATE cxx_std_23)
+    target_compile_features(bench_css_selector PRIVATE ${LEXBORPP_CXX_STD})
 
     # VS generator fallback: lexbor include を直接追加 (INTERFACE IMPORTED 経由の伝搬が
     # 期待通り動作しない場合があるため)

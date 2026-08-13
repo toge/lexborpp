@@ -9,7 +9,7 @@ target_include_directories(all_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 if(LEXBOR_INCLUDE_DIR)
     target_include_directories(all_test PRIVATE "${LEXBOR_INCLUDE_DIR}")
 endif()
-target_compile_features(all_test PRIVATE cxx_std_23)
+target_compile_features(all_test PRIVATE ${LEXBORPP_CXX_STD})
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
     target_link_options(all_test PRIVATE "-sSTACK_SIZE=5242880")

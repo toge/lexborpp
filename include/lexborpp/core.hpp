@@ -318,22 +318,19 @@ auto inline get_attr_value(lxb_dom_node_t* node, std::string_view attr_name) noe
     return false;
   }
 
-  auto attr_len = size_t{};
-  auto const attr = lxb_dom_element_get_attribute(lxb_dom_interface_element(const_cast<lxb_dom_node_t*>(node)),
-                                                  reinterpret_cast<const lxb_char_t*>("class"), 5, &attr_len);
-  if (attr == nullptr) {
+  auto const attr = get_attr_value(const_cast<lxb_dom_node_t*>(node), "class");
+  if (not attr.has_value()) {
     return false;
   }
 
-  auto const attr_view = std::string_view{reinterpret_cast<const char*>(attr), attr_len};
   auto constexpr delimiters = std::string_view{" \t\n\r\f"};
 
-  for (auto start = attr_view.find_first_not_of(delimiters); start != std::string_view::npos; ) {
-    auto const end = attr_view.find_first_of(delimiters, start);
-    if (attr_view.substr(start, end - start) == class_name) {
+  for (auto start = attr->find_first_not_of(delimiters); start != std::string_view::npos; ) {
+    auto const end = attr->find_first_of(delimiters, start);
+    if (attr->substr(start, end - start) == class_name) {
       return true;
     }
-    start = attr_view.find_first_not_of(delimiters, end);
+    start = attr->find_first_not_of(delimiters, end);
   }
 
   return false;
@@ -512,8 +509,9 @@ auto inline get_first_element_by_class(lxb_dom_node_t* node, std::string_view cl
   auto* child = lxb_dom_node_first_child(node);
   while (child != nullptr) {
     auto* next = lxb_dom_node_next(child);
-    lxb_dom_node_remove(child);
-    lxb_dom_node_destroy(child);
+    // 孫以下も含めて確実に破棄する。lxb_dom_node_destroy は浅いため、
+    // 要素ノードの子孫がリークする。
+    lxb_dom_node_destroy_deep(child);
     child = next;
   }
 

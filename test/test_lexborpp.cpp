@@ -953,6 +953,115 @@ TEST_CASE("runtime CSS parser rejects invalid selectors gracefully") {
   }
 }
 
+TEST_CASE("indexed queries respect the search scope") {
+  // インデックスが文書全体で構築されていても、サブツリー起点の検索は
+  // サブツリー外のノードを返してはならない。
+  auto const html = R"HTML(
+    <div id="outer">
+      <div id="inner"></div>
+    </div>
+    <div id="else"></div>
+  )HTML";
+  auto fixture = html_document_fixture{html};
+  auto* root = fixture.document_node();
+  auto index = lexborpp::document_id_index{root};
+
+  auto* subtree = lexborpp::query_selector(root, "#outer");
+  REQUIRE(subtree != nullptr);
+
+  SECTION("runtime query_selector does not leak outside the subtree") {
+    REQUIRE(lexborpp::query_selector(subtree, "#else") == nullptr);
+    REQUIRE(lexborpp::query_selector(subtree, "#else", index) == nullptr);
+
+    auto* inner = lexborpp::query_selector(subtree, "#inner", index);
+    REQUIRE(inner != nullptr);
+    REQUIRE(lexborpp::get_attr_value(inner, "id") == "inner");
+  }
+
+  SECTION("runtime query_selector_all does not leak outside the subtree") {
+    REQUIRE(lexborpp::query_selector_all(subtree, "#else", index).empty());
+
+    auto results = lexborpp::query_selector_all(subtree, "#inner", index);
+    REQUIRE(results.size() == 1);
+    REQUIRE(lexborpp::get_attr_value(results[0], "id") == "inner");
+  }
+
+  SECTION("NTTP query_selector does not leak outside the subtree") {
+    REQUIRE(lexborpp::query_selector<"#else">(subtree) == nullptr);
+    REQUIRE(lexborpp::query_selector<"#else">(subtree, index) == nullptr);
+
+    auto* inner = lexborpp::query_selector<"#inner">(subtree, index);
+    REQUIRE(inner != nullptr);
+    REQUIRE(lexborpp::get_attr_value(inner, "id") == "inner");
+  }
+
+  SECTION("NTTP query_selector_all does not leak outside the subtree") {
+    REQUIRE(lexborpp::query_selector_all<"#else">(subtree, index).empty());
+
+    auto results = lexborpp::query_selector_all<"#inner">(subtree, index);
+    REQUIRE(results.size() == 1);
+    REQUIRE(lexborpp::get_attr_value(results[0], "id") == "inner");
+  }
+
+  SECTION("descendant id outside subtree is not matched via ancestor chain") {
+    // サブツリー内のノードを右端 id で検索するケース。インデックスは
+    // 全体で構築されているのでスコープチェックが機能していることの確認。
+    auto* nested = lexborpp::query_selector(root, "#inner");
+    REQUIRE(nested != nullptr);
+
+    auto* via_index = lexborpp::query_selector(root, "div#outer #inner", index);
+    REQUIRE(via_index == nested);
+
+    auto* via_subtree_index = lexborpp::query_selector(subtree, "#inner", index);
+    REQUIRE(via_subtree_index == nested);
+  }
+}
+
+TEST_CASE("set_text_content destroys nested descendants") {
+  auto const html = R"HTML(<div id="a">old <b>nested <i>deep</i></b> tail</div>)HTML";
+  auto fixture = html_document_fixture{html};
+  auto* root = fixture.document_node();
+  auto* node = lexborpp::query_selector(root, "#a");
+  REQUIRE(node != nullptr);
+
+  REQUIRE(lexborpp::set_text_content(node, "NEW"));
+  REQUIRE(lexborpp::get_deep_text(node) == "NEW");
+  REQUIRE(lexborpp::outer_html(node) == R"(<div id="a">NEW</div>)");
+}
+
+TEST_CASE("empty quoted attribute values are valid selectors") {
+  auto const html = R"HTML(
+    <div id="empty" custom-attr=""></div>
+    <div id="spaced" custom-attr=" "></div>
+    <div id="missing"></div>
+  )HTML";
+  auto fixture = html_document_fixture{html};
+  auto* root = fixture.document_node();
+
+  SECTION("runtime parser accepts [attr=\"\"]") {
+    auto* node = lexborpp::query_selector(root, "[custom-attr=\"\"]");
+    REQUIRE(node != nullptr);
+    REQUIRE(lexborpp::get_attr_value(node, "id") == "empty");
+  }
+
+  SECTION("runtime parser rejects [attr=] without quotes") {
+    REQUIRE(lexborpp::query_selector(root, "[custom-attr=]") == nullptr);
+    REQUIRE(lexborpp::query_selector_all(root, "[custom-attr=]").empty());
+  }
+
+  SECTION("NTTP parser accepts [attr=\"\"]") {
+    auto* node = lexborpp::query_selector<"[custom-attr=\"\"]">(root);
+    REQUIRE(node != nullptr);
+    REQUIRE(lexborpp::get_attr_value(node, "id") == "empty");
+  }
+
+  SECTION("quoted value with space") {
+    auto* node = lexborpp::query_selector(root, "[custom-attr=\" \"]");
+    REQUIRE(node != nullptr);
+    REQUIRE(lexborpp::get_attr_value(node, "id") == "spaced");
+  }
+}
+
 TEST_CASE("document_id_index") {
   auto fixture = html_document_fixture{kHtml};
   auto* root = fixture.document_node();

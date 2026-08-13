@@ -11,6 +11,15 @@
 
 namespace lexborpp {
 
+/**
+ * @brief 指定ルート配下の `id` 属性値からノードへの逆引きインデックスです。
+ *
+ * @warning このインデックスは構築時点のスナップショットです。構築後に
+ *          DOM を編集（id の変更・ノードの削除など）しても追従しません。
+ *          編集後は rebuild() で作り直してください。
+ *          また、文書内で id が重複している場合、最初に見つかった
+ *          ノードのみが登録されます。
+ */
 class document_id_index {
 public:
   document_id_index() = default;

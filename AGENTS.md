@@ -48,6 +48,7 @@
 - **walkers は borrowed_range**: Lexbor の生ポインタ (`lxb_dom_node_t*`) をそのまま yield する。元の `lxb_html_document_t` の寿命内でのみ使用可。`document_ptr` よりも早く破棄しないこと。
 - **`has_class` はトークン分割** / **`clazz<"...">` は完全一致**: 仕様の差。README の「注意点」セクション参照。
 - **エラー契約**: `parse_html` は `std::expected<document_ptr, lxb_status_t>`、失敗時に `lxb_status_t` を返す。`query_selector` の失敗は `nullptr`、`query_selector_all` の失敗は空配列。
+- **`document_id_index` はスナップショット**: 構築後の DOM 編集 (id 変更・ノード削除) には追従しない。編集後は `rebuild()` 必須。id 重複時は最初に見つかったノードのみ登録。
 
 ## テスト運用
 

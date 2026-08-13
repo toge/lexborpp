@@ -157,6 +157,8 @@ template <std::size_t Max>
 }
 
 // query_selector_runtime with index
+// NOTE: インデックスは構築時のスナップショットです。構築後に DOM を編集した場合、
+//       結果は古いノードを指す可能性があります。検索の直前に rebuild してください。
 [[nodiscard]] inline auto query_selector_runtime(
   lxb_dom_node_t* node,
   std::string_view selector,
@@ -169,7 +171,10 @@ template <std::size_t Max>
   auto const* id_value = runtime_get_id_prefilter(spec);
   if (id_value != nullptr && spec.group_count == 1) {
     auto* found = index.find(*id_value);
-    if (found != nullptr && match_runtime_selector(found, spec)) {
+    // インデックスは文書全体で構築されることがあるため、検索スコープ
+    // （開始ノード自身 + その子孫）内のノードか必ず確認する。
+    if (found != nullptr && is_descendant_of(found, node) &&
+        match_runtime_selector(found, spec)) {
       return found;
     }
     return nullptr;
@@ -190,8 +195,10 @@ template <std::size_t Max>
 
   auto const* id_value = runtime_get_id_prefilter(spec);
   if (id_value != nullptr && spec.group_count == 1 && spec.groups[0].compound_count == 1) {
+    // Single compound with id: at most 1 result (HTML の id は文書内で一意と想定)
     auto* found = index.find(*id_value);
-    if (found != nullptr && match_runtime_selector(found, spec)) {
+    if (found != nullptr && is_descendant_of(found, node) &&
+        match_runtime_selector(found, spec)) {
       return {found};
     }
     return {};

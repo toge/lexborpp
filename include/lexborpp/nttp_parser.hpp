@@ -3,6 +3,7 @@
 
 #include <array>
 #include <cstddef>
+#include <optional>
 #include <ranges>
 #include <stdexcept>
 #include <string_view>
@@ -146,8 +147,11 @@ constexpr auto parse_name(std::string_view input, std::size_t& pos) noexcept -> 
 
 /**
  * @brief 属性 selector の引用付き値を切り出します。
+ *
+ * 空文字列（`[attr=""]`）も有効な値として許容します。
+ * 未終端の引用符は不正な selector とみなします。
  */
-constexpr auto parse_quoted_value(std::string_view input, std::size_t& pos) -> std::string_view {
+constexpr auto parse_quoted_value(std::string_view input, std::size_t& pos) -> std::optional<std::string_view> {
   auto const quote = input[pos];
   ++pos;
   auto const begin = pos;
@@ -155,7 +159,7 @@ constexpr auto parse_quoted_value(std::string_view input, std::size_t& pos) -> s
     ++pos;
   }
   if (pos >= input.size()) {
-    return {};
+    return std::nullopt;  // unterminated quote
   }
   auto const value = input.substr(begin, pos - begin);
   ++pos;
@@ -237,6 +241,18 @@ struct selector_spec {
     }
   }
   return nullptr;
+}
+
+/**
+ * @brief `candidate` が `scope` 自身または `scope` の子孫かを判定します。
+ */
+[[nodiscard]] constexpr auto is_descendant_of(lxb_dom_node_t* candidate, lxb_dom_node_t* scope) noexcept -> bool {
+  for (auto* n = candidate; n != nullptr; n = n->parent) {
+    if (n == scope) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /**
@@ -487,13 +503,20 @@ constexpr auto parse_simple_selector(
         throw std::runtime_error{"NTTP CSS selector attribute value is missing"};
       }
 
+      auto was_quoted = false;
       if (input[pos] == '"' || input[pos] == '\'') {
-        value = parse_quoted_value(input, pos);
+        was_quoted = true;
+        auto const quoted = parse_quoted_value(input, pos);
+        if (not quoted.has_value()) {
+          throw std::runtime_error{"NTTP CSS selector attribute value is missing a closing quote"};
+        }
+        value = *quoted;
       } else {
         value = parse_name(input, pos);
       }
 
-      if (value.empty()) {
+      // 空値は引用符付きの場合のみ有効 (`[attr=""]`)。`[attr=]` は不正。
+      if (value.empty() && not was_quoted) {
         throw std::runtime_error{"NTTP CSS selector attribute value must not be empty"};
       }
       skip_spaces(input, pos);

@@ -206,6 +206,8 @@ constexpr auto compiled_id_prefilter() -> std::string_view {
 }
 
 // --- Query implementations with document_id_index ---
+// NOTE: インデックスは構築時のスナップショットです。構築後に DOM を編集した場合、
+//       結果は古いノードを指す可能性があります。検索の直前に rebuild してください。
 template <detail::fixed_string Selector>
 [[nodiscard]] auto inline query_selector_impl(
   lxb_dom_node_t* node,
@@ -216,7 +218,10 @@ template <detail::fixed_string Selector>
   constexpr auto id_value = compiled_id_prefilter<Selector>();
   if constexpr (!id_value.empty() && compiled_selector_v<Selector>.group_count == 1) {
     auto* found = index.find(id_value);
-    if (found != nullptr && match_selector_compiled<Selector>(found)) {
+    // インデックスは文書全体で構築されることがあるため、検索スコープ
+    // （開始ノード自身 + その子孫）内のノードか必ず確認する。
+    if (found != nullptr && is_descendant_of(found, node) &&
+        match_selector_compiled<Selector>(found)) {
       return found;
     }
     return nullptr;
@@ -236,9 +241,10 @@ template <detail::fixed_string Selector>
   if constexpr (!id_value.empty() &&
                 compiled_selector_v<Selector>.group_count == 1 &&
                 compiled_selector_v<Selector>.groups[0].compound_count == 1) {
-    // Single compound with id: at most 1 result
+    // Single compound with id: at most 1 result (HTML の id は文書内で一意と想定)
     auto* found = index.find(id_value);
-    if (found != nullptr && match_selector_compiled<Selector>(found)) {
+    if (found != nullptr && is_descendant_of(found, node) &&
+        match_selector_compiled<Selector>(found)) {
       return {found};
     }
     return {};

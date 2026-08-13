@@ -206,6 +206,8 @@ auto dump_ready_items(lxb_dom_node_t* root) -> void {
 | `query_selector_all<"...">(node, index)` | NTTP selector + インデックスでルート参照を改善した全要素を返す |
 
 > **インデックス利用の前提**: セレクタの右端 compound に `id` simple selector が含まれる場合のみインデックスを参照します。それ以外は通常の DOM ツリー走査にフォールバックします。
+>
+> **スナップショットであることに注意**: `document_id_index` は構築時点の `id` マップです。DOM を編集（id の変更・ノードの削除）した後は自動追従しません。編集後に検索する場合は `rebuild()` で作り直してください。また、文書内で `id` が重複している場合、最初に見つかったノードのみが登録されます。
 
 ### 属性・テキスト・シリアライズ
 

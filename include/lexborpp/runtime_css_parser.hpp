@@ -122,13 +122,20 @@ constexpr auto parse_runtime_simple_selector(
         return false; // attribute value missing
       }
 
+      auto was_quoted = false;
       if (input[pos] == '"' || input[pos] == '\'') {
-        value = parse_quoted_value(input, pos);
+        was_quoted = true;
+        auto const quoted = parse_quoted_value(input, pos);
+        if (not quoted.has_value()) {
+          return false; // missing closing quote
+        }
+        value = *quoted;
       } else {
         value = parse_name(input, pos);
       }
 
-      if (value.empty()) {
+      // Empty values are only valid when quoted (`[attr=""]`); `[attr=]` is invalid.
+      if (value.empty() && !was_quoted) {
         return false; // attribute value must not be empty
       }
       skip_spaces(input, pos);
