@@ -14,13 +14,13 @@
 
 - HTML サイズ: 942 bytes (ネスト付きセクション/記事/属性)
 - 繰り返し回数: 10,000 回
-- コンパイラ最適化: `-O3 -march=native`
+- コンパイラ最適化: `-O3 -march=native` (`./build.sh` = `LEXBORPP_NATIVE_ARCH=ON` + Release)
+- 計測日: 2026-08-22 (gcc / x86_64 Linux)
 
 ## 実行方法
 
 ```bash
-cmake -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build --target bench_css_selector
+./build.sh          # LEXBORPP_NATIVE_ARCH=ON で configure & build
 ./build/bench_css_selector
 ```
 
@@ -28,23 +28,23 @@ cmake --build build --target bench_css_selector
 
 | セレクタ | NTTP (μs) | Runtime (μs) | Naive (μs) | NTTP/Naive |
 |---------|-----------|-------------|-----------|------------|
-| `#leaf-b` (deep) | 0.081 | 3.764 | 0.092 | 1.1x |
-| `article.card` | 0.062 | 2.775 | 0.022 | 0.4x |
-| `section#tree > article.card` | 0.071 | 3.114 | 0.026 | 0.4x |
-| `section#tree article.card p` | 0.068 | 2.972 | 0.027 | 0.4x |
-| `article#a + article#b` | 0.107 | 2.754 | 0.063 | 0.6x |
-| `article#a ~ article` | 0.114 | 2.676 | 0.047 | 0.4x |
-| `div[data-role=main]` | 0.057 | 2.736 | 0.042 | 0.7x |
-| `p.match` | 0.254 | 2.965 | 0.225 | 0.9x |
-| `p, span > b` | 0.112 | 2.780 | 0.016 | 0.1x |
+| `#leaf-b` (via tree) | 0.070 | 9.025 | 0.107 | 1.5x |
+| `article.card` | 0.058 | 8.384 | 0.014 | 0.2x |
+| `section#tree > article.card` | 0.066 | 8.270 | 0.016 | 0.2x |
+| `section#tree article.card p` | 0.050 | 8.343 | 0.018 | 0.4x |
+| `article#a + article#b` (adj sibling) | 0.119 | 8.365 | 0.064 | 0.5x |
+| `article#a ~ article` (follow sibling) | 0.101 | 8.337 | 0.048 | 0.5x |
+| `div[data-role=main]` | 0.058 | 8.201 | 0.039 | 0.7x |
+| `p.match` | 0.227 | 8.332 | 0.190 | 0.8x |
+| `p, span > b` (group) | 0.103 | 8.188 | 0.015 | 0.1x |
 
 ## 結果: query_selector_all (全件)
 
 | セレクタ | NTTP (μs) | Runtime (μs) | Naive (μs) | NTTP/Naive |
 |---------|-----------|-------------|-----------|------------|
-| `article.card` | 0.422 | 3.117 | 0.241 | 0.6x |
-| `section#tree article.card p` | 0.243 | 3.124 | 0.198 | 0.8x |
-| `p, span > b` | 0.274 | 2.979 | 0.464 | 1.7x |
+| `article.card` | 0.271 | 8.415 | 0.231 | 0.9x |
+| `section#tree article.card p` | 0.218 | 9.138 | 0.179 | 0.8x |
+| `p, span > b` (group) | 0.208 | 8.522 | 0.453 | 2.2x |
 
 ## 総評
 
@@ -52,8 +52,8 @@ cmake --build build --target bench_css_selector
 
 小さな DOM では **Naive (range adapter) が NTTP より 2〜7倍高速**。
 
-- `article.card`: Naive 0.022μs vs NTTP 0.062μs (Naive 2.8x)
-- `p, span > b`: Naive 0.016μs vs NTTP 0.112μs (Naive 7.0x)
+- `article.card`: Naive 0.014μs vs NTTP 0.058μs (Naive 約4x)
+- `p, span > b`: Naive 0.015μs vs NTTP 0.103μs (Naive 約7x)
 
 理由: range adapter (`tag<>`, `id<>`) は内部ループが非常に軽量。NTTP の再帰テンプレート呼び出しには関数呼び出しオーバーヘッドが乗る。DOM が小さければ、パース・マッチの静的最適化よりループの軽さが勝る。
 
@@ -61,14 +61,16 @@ cmake --build build --target bench_css_selector
 
 深くネストされたセレクタや `query_selector_all` では **NTTP が Naive を上回る**。
 
-- `p, span > b` (all): NTTP 0.274μs vs Naive 0.464μs (NTTP 1.7x)
-- `#leaf-b` (deep): NTTP 0.081μs vs Naive 0.092μs (NTTP 1.1x)
+- `p, span > b` (all): NTTP 0.208μs vs Naive 0.453μs (NTTP 2.2x)
+- `#leaf-b` (via tree): NTTP 0.070μs vs Naive 0.107μs (NTTP 1.5x)
 
 理由: NTTP は右から左の再帰で効率的に探索範囲を絞り込む。Naive は手動ループで複雑な結合子を再実装する必要があり、コードが膨張しやすい。
 
-### Runtime は常に ~3μs
+### Runtime は常に ~8μs
 
-Runtime 版は毎回パース + AST 解釈があるため、セレクタの複雑さに関わらず **一定のレイテンシ**。NTTP や Naive の 10〜80倍遅い。
+Runtime 版は毎回パース + spec 解釈があるため、セレクタの複雑さに関わらず **一定のレイテンシ**。NTTP や Naive の数十〜数百倍遅い。
+
+> **注意**: Runtime 版は query 1 回ごとにパース結果の spec (三重ネスト配列, Max=12 で約 130KB+) をスタックに構築する。この固定コストがレイテンシの支配要因である。
 
 ### 選択指針
 

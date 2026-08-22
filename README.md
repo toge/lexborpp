@@ -194,6 +194,8 @@ auto dump_ready_items(lxb_dom_node_t* root) -> void {
 | `has_class(node, {"a", "b"})` | 指定したすべての class を持つか判定する |
 | `get_first_element_by_class(node, class_name)` | `class` 属性文字列が**完全一致**する最初の要素を返す |
 | `get_elements_by_class(node, class_name)` | 開始ノードを含め、class トークンが一致する全要素を返す |
+| `get_following_element_by_op(node, op)` | 開始ノード自身と子孫を深さ優先で走査し、述語 `op` が最初に true を返したノードを返す（名前に反して "following 軸" ではない点に注意） |
+| `get_sibling_element_by_op(node, op)` | 指定ノード自身から後続兄弟を順に述語 `op` で判定し、最初に一致したノードを返す |
 | `query_selector(node, selector)` | CSS selector に一致する最初の要素を返す |
 | `query_selector_all(node, selector)` | CSS selector に一致する全要素を返す |
 | `query_selector<"...">(node)` | NTTP で渡した CSS selector に一致する最初の要素を返す |
@@ -278,9 +280,11 @@ ctest --test-dir build -V
 - `get_first_child_text()` / `get_all_children_text()` は直下のテキストノードだけを対象にします
 - `get_deep_text()` は子孫全体のテキストを対象にします
 - `query_selector()` は無効な selector や初期化失敗時に `nullptr` を返し、`query_selector_all()` は空配列を返します
+  - 実行時版 (`query_selector(node, selector)`) は**不正な selector も無音で「0 件ヒット」扱い**になります。NTTP 版のようなコンパイル時エラー検出はないため、selector 文字列の誤りに注意してください
 - `query_selector()` / `query_selector_all()` と `query_selector<"...">()` / `query_selector_all<"...">()` は、いずれも**開始ノード自身を探索対象に含みます**（root 参加挙動を統一しています）
 - `query_selector<"...">()` / `query_selector_all<"...">()` はコンパイル時解析済みの selector を使います。未対応構文はコンパイルエラーになります
 - walker / range アダプタは Lexbor の生ポインタをそのまま返すため、元の `lxb_html_document_t` の寿命内でだけ使ってください
+- インデックス付き query (`query_selector(node, selector, index)` 等) は id の一意性を前提とします。文書内で id が重複している場合、インデックスには最初の 1 ノードのみ登録されるため、スコープ検索では素の走査と結果が異なることがあります
 
 ## 収録ファイル
 

@@ -7,33 +7,29 @@ include(CTest)
 
 option(BUILD_TEST "Build tests" ON)
 option(BUILD_BENCH "Build benchmarks" ON)
-
-## add warning
-if (CMAKE_COMPILER_IS_GNUCXX)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -pedantic")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g3")
-endif()
-
-if (MSVC)
-    if(CMAKE_CXX_FLAGS MATCHES "/W[0-4]")
-        string(REGEX REPLACE "/W[0-4]" "/W4" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
-    else()
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /W4")
-    endif()
-endif()
-
-## optimization
 option(LEXBORPP_NATIVE_ARCH "Build with -march=native / /Ox for maximum speed (not portable across machines)" OFF)
-if (CMAKE_COMPILER_IS_GNUCXX)
-    if (LEXBORPP_NATIVE_ARCH)
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -march=native")
-    else()
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O2")
+
+## 警告フラグ・最適化は top-level ビルドのときだけ適用する。
+## add_subdirectory() で取り込む利用者のビルド設定を汚染しないようにするため。
+if(PROJECT_IS_TOP_LEVEL)
+    # ビルドタイプ未指定なら Release を既定にする (無最適化の取りこぼし防止)。
+    if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+        set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
     endif()
-endif()
-if (MSVC)
-    if (LEXBORPP_NATIVE_ARCH)
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /Ox")
+
+    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        add_compile_options(-Wall -Wextra -pedantic)
+        add_compile_options("$<$<CONFIG:Debug>:-g3>")
+        if(LEXBORPP_NATIVE_ARCH)
+            add_compile_options("$<$<CONFIG:Release>:-O3;-march=native>")
+        else()
+            add_compile_options("$<$<CONFIG:Release>:-O2>")
+        endif()
+    elseif(MSVC)
+        add_compile_options(/W4)
+        if(LEXBORPP_NATIVE_ARCH)
+            add_compile_options("$<$<CONFIG:Release>:/Ox>")
+        endif()
     endif()
 endif()
 
@@ -120,11 +116,13 @@ install(FILES
             "${CMAKE_CURRENT_BINARY_DIR}/lexborppConfigVersion.cmake"
         DESTINATION ${LEXBORPP_INSTALL_CMAKEDIR})
 
-if(BUILD_TEST)
+# テストとベンチは top-level のときだけビルドする。
+# add_subdirectory 利用者環境に Catch2 が無くても configure が壊れないようにするため。
+if(BUILD_TEST AND PROJECT_IS_TOP_LEVEL)
     add_subdirectory(test)
 endif()
 
-if(BUILD_BENCH)
+if(BUILD_BENCH AND PROJECT_IS_TOP_LEVEL)
     add_executable(bench_css_selector benchmark/bench_css_selector.cpp)
     target_link_libraries(bench_css_selector PRIVATE lexborpp::lexborpp)
     target_compile_features(bench_css_selector PRIVATE ${LEXBORPP_CXX_STD})

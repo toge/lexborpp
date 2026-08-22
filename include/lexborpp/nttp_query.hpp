@@ -6,10 +6,8 @@
 
 #include "lexbor/dom/dom.h"
 
-#include "lexborpp/core.hpp"
+// detail::fixed_string (nttp_parser) / document_id_index は nttp_match.hpp 経由で取り込まれる。
 #include "lexborpp/nttp_match.hpp"
-#include "lexborpp/nttp_parser.hpp"
-#include "lexborpp/document_id_index.hpp"
 
 namespace lexborpp {
 /**

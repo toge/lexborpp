@@ -1207,3 +1207,66 @@ TEST_CASE("document_id_index with runtime query_selector") {
   }
 }
 
+TEST_CASE("document_id_index registers only the first duplicate id") {
+  auto fixture = html_document_fixture{
+    R"(<div><p id="dup">first</p><p id="dup">second</p><span id="solo">x</span></div>)"};
+  auto* root = fixture.document_node();
+
+  auto index = lexborpp::document_id_index{root};
+  // 重複 id は最初に見つかった (DFS 順) ノードのみ登録する。
+  auto* first_dup = lexborpp::query_selector(root, "p");
+  REQUIRE(first_dup != nullptr);
+  REQUIRE(index.size() == 2);
+  REQUIRE(index.find("dup") == first_dup);
+  REQUIRE(lexborpp::get_attr_value(index.find("dup"), "id") == "dup");
+
+  SECTION("indexed query also resolves to the first node") {
+    auto* node = lexborpp::query_selector(root, "#dup", index);
+    REQUIRE(node == first_dup);
+  }
+
+  SECTION("rebuild keeps first-wins semantics") {
+    index.rebuild(root);
+    REQUIRE(index.find("dup") == first_dup);
+  }
+}
+
+TEST_CASE("document_id_index goes stale after DOM edits until rebuild") {
+  auto fixture = html_document_fixture{R"(<div id="target"><b>hi</b></div>)"};
+  auto* root = fixture.document_node();
+  auto index = lexborpp::document_id_index{root};
+
+  auto* target = index.find("target");
+  REQUIRE(target != nullptr);
+
+  // id を書き換えてもスナップショットは追従しない。
+  REQUIRE(lexborpp::set_attr(lexborpp::as_element(target), "id", "renamed"));
+  SECTION("stale snapshot still serves the old key and misses the new one") {
+    REQUIRE(index.find("target") == target);
+    REQUIRE(index.find("renamed") == nullptr);
+  }
+
+  SECTION("rebuild picks up the new id") {
+    index.rebuild(root);
+    REQUIRE(index.find("target") == nullptr);
+    REQUIRE(index.find("renamed") == target);
+
+    auto* found = lexborpp::query_selector(root, "#renamed", index);
+    REQUIRE(found == target);
+  }
+}
+
+TEST_CASE("serialize and attribute helpers tolerate null nodes") {
+  SECTION("outer_html(nullptr) returns empty string") {
+    REQUIRE(lexborpp::outer_html(nullptr).empty());
+  }
+
+  SECTION("inner_html(nullptr) returns empty string") {
+    REQUIRE(lexborpp::inner_html(nullptr).empty());
+  }
+
+  SECTION("set_attr(nullptr) returns false") {
+    REQUIRE_FALSE(lexborpp::set_attr(nullptr, "id", "x"));
+  }
+}
+

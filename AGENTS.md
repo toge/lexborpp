@@ -19,9 +19,9 @@
 
 ## ビルドの注意点
 
-- `build.sh` は **`~/vm/vcpkg`** を `VCPKG_ROOT` として固定で参照している (`readlink -f` で解決)。別の場所に vcpkg がある場合は環境変数を export してもスクリプト側で上書きされるので、スクリプトを編集するか該当パスにシンボリックリンクを置く。
+- `build.sh` は **`~/vm/vcpkg`** を `VCPKG_ROOT` として固定で参照している (`readlink -f` で解決)。存在しない場合はエラーメッセージを出して中断する。別の場所に vcpkg がある場合は環境変数を export してもスクリプト側で上書きされるので、スクリプトを編集するか該当パスにシンボリックリンクを置く。
 - vcpkg トリプレットは **`x64-linux-static`** がハードコード。macOS / Windows ではそのまま動かない。`./build.sh static` でも `build_static/` ができるだけで、トリプレット自体は同じ。
-- `conanfile.py` がルートに存在すれば conan にフォールバックする分岐あり。両方が揃っている環境では vcpkg 経路が優先。
+- 最適化フラグは CMake の **`LEXBORPP_NATIVE_ARCH`** オプションに一本化されている (`build.sh` は ON で渡す)。`-Ofast` (fast-math) は使わない。
 - コンパイラは **C++26 を優先、なければ C++23**。C++20 ではビルド不可 (`std::expected`、borrowed_range 対応などで C++23 が必須)。
 - CMake 最低バージョンは **3.25**。
 
@@ -38,7 +38,7 @@
 | `benchmark/bench_css_selector.cpp` | NTTP / Runtime / Naive の比較ベンチマーク |
 | `benchmark/BENCHMARK.md` | ベンチマーク計測結果 |
 | `vcpkg.json` | 依存: `lexbor`, `catch2` |
-| `build.sh` / `test.sh` | vcpkg / conan 経由のラッパ |
+| `build.sh` / `test.sh` | vcpkg 経由のビルド / テストラッパ (`test.sh` は第1引数でビルドディレクトリ指定可) |
 | `context7.json` | context7 公開用。**API キーなので取り扱い注意** |
 
 ## API の癖 (README 以上の細目)
@@ -58,10 +58,10 @@
 
 ## スタイル / ワークフロー
 
-- フォーマッタ・リンタの自動設定は **なし** (`.clang-format`, `.pre-commit-config.yaml` ともに未配置)。CI もない。
-- GCC 系では `-Wall -Wextra -pedantic -O3 -march=native -g3` が既定 (`CMakeLists.txt`)。追加の警告は `target_compile_options` で個別に。
+- フォーマッタ・リンタの自動設定は **なし** (`.clang-format`, `.pre-commit-config.yaml` ともに未配置)。CI は `.github/workflows/ci.yml` (linux / msvc / macos / clang / emscripten の 5 ジョブ)。
+- 警告フラグ (`-Wall -Wextra -pedantic`) は top-level ビルド時のみ `add_compile_options` で適用 (GNU/Clang 判定、clang にも有効)。`-g3` は Debug 構成のみ。最適化は Release 構成で `-O2`、`LEXBORPP_NATIVE_ARCH=ON` 時は `-O3 -march=native`。
 - ヘッダオンリーのため、API 変更後は umbrella `include/lexborpp.hpp` および `include/lexborpp/*.hpp` だけでなく `test/test_lexborpp.cpp` の挙動差分も確認する。
-- C++26 機能を使う場合、コンパイラが対応しなければ自動的に C++23 にフォールバックする (`CMakeLists.txt:9-18`)。ただしコード側で C++26 前提の機能を入れると C++23 経路では壊れる。
+- C++26 機能を使う場合、コンパイラが対応しなければ自動的に C++23 にフォールバックする (`CMakeLists.txt`)。ただしコード側で C++26 前提の機能を入れると C++23 経路では壊れる。
 
 ## やってはいけないこと
 

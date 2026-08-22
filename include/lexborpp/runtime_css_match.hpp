@@ -39,7 +39,6 @@ namespace detail {
   default:
     return false;
   }
-  return false;
 }
 
 // Match all simples in a compound (AND)
@@ -108,14 +107,13 @@ template <std::size_t Max>
   return false;
 }
 
-// Public API: query_selector (runtime)
-[[nodiscard]] inline auto query_selector_runtime(
+// --- Spec-based scan cores (パース済み spec を走査する共通経路) ---
+
+template <std::size_t Max>
+[[nodiscard]] inline auto query_selector_spec_first(
   lxb_dom_node_t* node,
-  std::string_view selector) -> lxb_dom_node_t* {
-  if (node == nullptr || selector.empty()) return nullptr;
-
-  auto spec = parse_runtime_selector_auto(selector);
-
+  runtime_selector_spec<Max> const& spec) -> lxb_dom_node_t* {
+  if (node == nullptr) return nullptr;
   for (auto* current : node_walker{node}) {
     if (is_non_element_node(current)) continue;
     if (match_runtime_selector(current, spec)) return current;
@@ -123,21 +121,38 @@ template <std::size_t Max>
   return nullptr;
 }
 
-// Public API: query_selector_all (runtime)
-[[nodiscard]] inline auto query_selector_all_runtime(
+template <std::size_t Max>
+[[nodiscard]] inline auto query_selector_spec_all(
   lxb_dom_node_t* node,
-  std::string_view selector) -> std::vector<lxb_dom_node_t*> {
+  runtime_selector_spec<Max> const& spec) -> std::vector<lxb_dom_node_t*> {
   auto result = std::vector<lxb_dom_node_t*>{};
-  if (node == nullptr || selector.empty()) return result;
-
-  auto spec = parse_runtime_selector_auto(selector);
+  if (node == nullptr) return result;
   result.reserve(16);
-
   for (auto* current : node_walker{node}) {
     if (is_non_element_node(current)) continue;
     if (match_runtime_selector(current, spec)) result.push_back(current);
   }
   return result;
+}
+
+// Public API: query_selector (runtime)
+[[nodiscard]] inline auto query_selector_runtime(
+  lxb_dom_node_t* node,
+  std::string_view selector) -> lxb_dom_node_t* {
+  if (node == nullptr || selector.empty()) return nullptr;
+
+  auto spec = parse_runtime_selector_auto(selector);
+  return query_selector_spec_first(node, spec);
+}
+
+// Public API: query_selector_all (runtime)
+[[nodiscard]] inline auto query_selector_all_runtime(
+  lxb_dom_node_t* node,
+  std::string_view selector) -> std::vector<lxb_dom_node_t*> {
+  if (node == nullptr || selector.empty()) return {};
+
+  auto spec = parse_runtime_selector_auto(selector);
+  return query_selector_spec_all(node, spec);
 }
 
 // --- Runtime id prefilter helpers ---
@@ -180,7 +195,7 @@ template <std::size_t Max>
     return nullptr;
   }
 
-  return query_selector_runtime(node, selector);
+  return query_selector_spec_first(node, spec);
 }
 
 // query_selector_all_runtime with index
@@ -204,7 +219,7 @@ template <std::size_t Max>
     return {};
   }
 
-  return query_selector_all_runtime(node, selector);
+  return query_selector_spec_all(node, spec);
 }
 
 }  // namespace detail

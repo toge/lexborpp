@@ -11,6 +11,10 @@
 #include "lexbor/dom/dom.h"
 #include "lexbor/css/css.h"
 
+// is_non_element_node 等 core.hpp の DOM ヘルパを使用するため、
+// 単独 include でも完結するように取り込む。
+#include "lexborpp/core.hpp"
+
 namespace lexborpp {
 
 namespace detail {
@@ -360,7 +364,7 @@ constexpr auto parse_selector_spec() {
       compound.simple_start = simple_start;
       compound.relation = relation;
 
-      parse_compound_elements<Selector, max>(input, pos, result);
+      parse_compound_elements<max>(input, pos, result);
 
       compound.simple_count = result.simple_count - simple_start;
       result.compound_count++;
@@ -422,7 +426,7 @@ constexpr auto parse_selector_spec() {
 /**
  * @brief compound selector 1 個分を解析して埋めます。
  */
-template <detail::fixed_string Selector, std::size_t Max>
+template <std::size_t Max>
 constexpr auto parse_simple_selector(
   std::string_view input,
   std::size_t& pos,
@@ -547,7 +551,7 @@ constexpr auto parse_simple_selector(
  * 最初の !is_name_terminator または combinator/comma までを
  * 連続する simple selector として解析し、フラットな simples 配列に追加します。
  */
-template <detail::fixed_string Selector, std::size_t Max>
+template <std::size_t Max>
 constexpr auto parse_compound_elements(
   std::string_view input,
   std::size_t& pos,
@@ -556,7 +560,7 @@ constexpr auto parse_compound_elements(
     throw std::runtime_error{"NTTP CSS selector ended unexpectedly"};
   }
 
-  parse_simple_selector<Selector, Max>(input, pos, result);
+  parse_simple_selector<Max>(input, pos, result);
 
   while (pos < input.size()) {
     if (is_space(input[pos]) || input[pos] == ',' || input[pos] == '>' ||
@@ -568,7 +572,7 @@ constexpr auto parse_compound_elements(
       throw std::runtime_error{"NTTP CSS selector token is invalid"};
     }
 
-    parse_simple_selector<Selector, Max>(input, pos, result);
+    parse_simple_selector<Max>(input, pos, result);
   }
 }
 }  // namespace detail

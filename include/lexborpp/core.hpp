@@ -108,8 +108,8 @@ auto constexpr inline is_non_element_node(lxb_dom_node_t const* node) noexcept -
   using iterator_category = std::forward_iterator_tag;         \
   using value_type        = Value;                             \
   using difference_type   = std::ptrdiff_t;                    \
-  using pointer           = Value*;                            \
-  using reference         = Value&;                            \
+  using pointer           = Value const*;                      \
+  using reference         = Value const&;                      \
   auto operator++(int) noexcept -> iterator {                  \
     auto temp = *this; ++*this; return temp;                    \
   }                                                            \
@@ -506,6 +506,18 @@ auto inline get_first_element_by_class(lxb_dom_node_t* node, std::string_view cl
     return false;
   }
 
+  // 既存の子を破棄する前に置換用テキストノードを先に生成する。
+  // 生成に失敗した場合でも既存子を失わないようにするため。
+  lxb_dom_node_t* text_node = nullptr;
+  if (!text.empty()) {
+    text_node = lxb_dom_interface_node(lxb_dom_document_create_text_node(
+      node->owner_document,
+      reinterpret_cast<lxb_char_t const*>(text.data()), text.size()));
+    if (text_node == nullptr) {
+      return false;
+    }
+  }
+
   auto* child = lxb_dom_node_first_child(node);
   while (child != nullptr) {
     auto* next = lxb_dom_node_next(child);
@@ -515,30 +527,27 @@ auto inline get_first_element_by_class(lxb_dom_node_t* node, std::string_view cl
     child = next;
   }
 
-  if (text.empty()) {
-    return true;
+  if (text_node != nullptr) {
+    // 戻り値なしのため挿入成否は判定できない (Lexbor API の制約)。
+    lxb_dom_node_insert_child(node, text_node);
   }
-
-  auto* const text_node = lxb_dom_document_create_text_node(node->owner_document,
-    reinterpret_cast<lxb_char_t const*>(text.data()), text.size());
-  if (text_node == nullptr) {
-    return false;
-  }
-
-  lxb_dom_node_insert_child(node, lxb_dom_interface_node(text_node));
   return true;
 }
 
 // --- Document RAII ---
 
+namespace detail {
+
 /**
  * @brief `lxb_html_document_t` を `std::unique_ptr` で破棄するための deleter です。
+ *
+ * document_ptr 経由でのみ使用します。
  */
 struct document_deleter {
   /**
    * @brief HTML ドキュメントを破棄します。
    *
-  * @param doc 破棄対象ドキュメントです。
+   * @param doc 破棄対象ドキュメントです。
    */
   auto constexpr operator()(lxb_html_document_t* doc) const noexcept -> void {
     if (doc != nullptr) {
@@ -547,7 +556,9 @@ struct document_deleter {
   }
 };
 
-using document_ptr = std::unique_ptr<lxb_html_document_t, document_deleter>;
+}  // namespace detail
+
+using document_ptr = std::unique_ptr<lxb_html_document_t, detail::document_deleter>;
 
 /**
  * @brief HTML 文字列をパースして RAII 管理されたドキュメントを返します。

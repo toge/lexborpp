@@ -19,6 +19,10 @@ namespace lexborpp {
  *          編集後は rebuild() で作り直してください。
  *          また、文書内で id が重複している場合、最初に見つかった
  *          ノードのみが登録されます。
+ *          保持するノードポインタは元ドキュメントに紐づくため、
+ *          ドキュメントを破棄した後の find() は無効なポインタを
+ *          返します。インデックスの寿命は必ずドキュメントより
+ *          短くしてください。
  */
 class document_id_index {
 public:
@@ -52,10 +56,9 @@ private:
       if (is_non_element_node(node)) continue;
       auto const id = get_attr_value(node, "id");
       if (id.has_value() && !id->empty()) {
-        auto key = std::string(*id);
-        if (!map_.contains(key)) {
-          map_.emplace(std::move(key), node);
-        }
+        // emplace は既存キーでは失敗するため、重複 id は「最初の
+        // 1 件勝ち残り」になる。
+        map_.emplace(std::string(*id), node);
       }
     }
   }
