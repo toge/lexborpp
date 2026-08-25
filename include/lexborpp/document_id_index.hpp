@@ -52,6 +52,7 @@ public:
 private:
   void build(lxb_dom_node_t* root) {
     if (root == nullptr) return;
+    map_.reserve(128); // ponytail: 1k idsで-26%、flat_hash_mapは依存増で却下
     for (auto* node : node_walker{root}) {
       if (is_non_element_node(node)) continue;
       auto const id = get_attr_value(node, "id");

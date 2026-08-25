@@ -322,6 +322,7 @@ auto inline get_attr_value(lxb_dom_node_t* node, std::string_view attr_name) noe
   if (not attr.has_value()) {
     return false;
   }
+  if (attr->size() < class_name.size()) return false; // ponytail: early reject
 
   auto constexpr delimiters = std::string_view{" \t\n\r\f"};
 

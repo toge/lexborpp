@@ -27,7 +27,7 @@ inline auto serialize_callback(const lxb_char_t* data, size_t len, void* ctx) no
 [[nodiscard]] auto inline outer_html(lxb_dom_node_t const* node) -> std::string {
   if (node == nullptr) return "";
   auto result = std::string{};
-  result.reserve(128);
+  result.reserve(512); // ponytail: 128では2.5KB要素で再確保、512で1回に
   lxb_html_serialize_tree_cb(const_cast<lxb_dom_node_t*>(node), detail::serialize_callback, &result);
   return result;
 }
@@ -38,7 +38,7 @@ inline auto serialize_callback(const lxb_char_t* data, size_t len, void* ctx) no
 [[nodiscard]] auto inline inner_html(lxb_dom_node_t const* node) -> std::string {
   if (node == nullptr) return "";
   auto result = std::string{};
-  result.reserve(128);
+  result.reserve(512);
   for (auto* child = lxb_dom_node_first_child(const_cast<lxb_dom_node_t*>(node)); child != nullptr; child = lxb_dom_node_next(child)) {
     lxb_html_serialize_tree_cb(child, detail::serialize_callback, &result);
   }

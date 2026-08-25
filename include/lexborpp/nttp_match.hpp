@@ -37,7 +37,11 @@ template <detail::fixed_string Selector, std::size_t GI, std::size_t CompoundI, 
     }
 
     if constexpr (s.kind == kind::type) {
-      return iequals(node_qualified_name(node), s.value);
+      if constexpr (s.tag_id != LXB_TAG__UNDEF) {
+        return lxb_dom_node_tag_id(const_cast<lxb_dom_node_t*>(node)) == s.tag_id;
+      } else {
+        return iequals(node_qualified_name(node), s.value);
+      }
     } else if constexpr (s.kind == kind::id) {
       return get_attr_value(node, "id") == s.value;
     } else if constexpr (s.kind == kind::class_name) {
@@ -205,6 +209,32 @@ constexpr auto compiled_id_prefilter() -> std::string_view {
   }
 }
 
+struct nttp_id_info {
+  std::string_view value{};
+  std::size_t compound_idx{};
+  bool found{false};
+  bool is_last{false};
+};
+
+template <detail::fixed_string Selector>
+constexpr auto compiled_id_info() -> nttp_id_info {
+  constexpr auto& spec = compiled_selector_v<Selector>;
+  if constexpr (spec.group_count != 1) {
+    return {};
+  } else {
+    constexpr auto& g = spec.groups[0];
+    for (auto ci = g.compound_count; ci-- > 0;) {
+      auto const& c = spec.compounds[g.compound_start + ci];
+      for (auto si = std::size_t{0}; si < c.simple_count; ++si) {
+        if (spec.simples[c.simple_start + si].kind == selector_simple_kind::id) {
+          return {spec.simples[c.simple_start + si].value, ci, true, ci == g.compound_count - 1};
+        }
+      }
+    }
+    return {};
+  }
+}
+
 // --- Query implementations with document_id_index ---
 // NOTE: インデックスは構築時のスナップショットです。構築後に DOM を編集した場合、
 //       結果は古いノードを指す可能性があります。検索の直前に rebuild してください。
@@ -215,16 +245,21 @@ template <detail::fixed_string Selector>
   if (node == nullptr) {
     return nullptr;
   }
-  constexpr auto id_value = compiled_id_prefilter<Selector>();
-  if constexpr (!id_value.empty() && compiled_selector_v<Selector>.group_count == 1) {
-    auto* found = index.find(id_value);
-    // インデックスは文書全体で構築されることがあるため、検索スコープ
-    // （開始ノード自身 + その子孫）内のノードか必ず確認する。
-    if (found != nullptr && is_descendant_of(found, node) &&
-        match_selector_compiled<Selector>(found)) {
-      return found;
+  constexpr auto info = compiled_id_info<Selector>();
+  if constexpr (info.found) {
+    auto* found = index.find(info.value);
+    if (found == nullptr || !is_descendant_of(found, node)) return nullptr;
+    if constexpr (info.is_last) {
+      if (match_selector_compiled<Selector>(found)) return found;
+      return nullptr;
+    } else {
+      // id is not in last compound: limit search to subtree of found
+      for (auto* cur : node_walker{found}) {
+        if (is_non_element_node(cur)) continue;
+        if (match_selector_compiled<Selector>(cur)) return cur;
+      }
+      return nullptr;
     }
-    return nullptr;
   } else {
     return query_selector_impl<Selector>(node);
   }
@@ -237,17 +272,27 @@ template <detail::fixed_string Selector>
   if (node == nullptr) {
     return {};
   }
-  constexpr auto id_value = compiled_id_prefilter<Selector>();
-  if constexpr (!id_value.empty() &&
-                compiled_selector_v<Selector>.group_count == 1 &&
-                compiled_selector_v<Selector>.groups[0].compound_count == 1) {
-    // Single compound with id: at most 1 result (HTML の id は文書内で一意と想定)
-    auto* found = index.find(id_value);
-    if (found != nullptr && is_descendant_of(found, node) &&
-        match_selector_compiled<Selector>(found)) {
-      return {found};
+  constexpr auto info = compiled_id_info<Selector>();
+  if constexpr (info.found) {
+    auto* found = index.find(info.value);
+    if (found == nullptr || !is_descendant_of(found, node)) return {};
+    if constexpr (info.is_last) {
+      if constexpr (compiled_selector_v<Selector>.groups[0].compound_count == 1) {
+        if (match_selector_compiled<Selector>(found)) return {found};
+        return {};
+      } else {
+        if (match_selector_compiled<Selector>(found)) return {found};
+        return {};
+      }
+    } else {
+      auto result = std::vector<lxb_dom_node_t*>{};
+      result.reserve(16);
+      for (auto* cur : node_walker{found}) {
+        if (is_non_element_node(cur)) continue;
+        if (match_selector_compiled<Selector>(cur)) result.push_back(cur);
+      }
+      return result;
     }
-    return {};
   } else {
     return query_selector_all_impl<Selector>(node);
   }

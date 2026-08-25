@@ -14,30 +14,28 @@
 namespace lexborpp {
 namespace detail {
 
-// Match one simple selector against a node
+// Match one simple selector against a node (flat)
 [[nodiscard]] inline auto match_runtime_simple(
   lxb_dom_node_t* node,
-  runtime_simple_spec const& simple) noexcept -> bool {
+  selector_simple_spec const& simple) noexcept -> bool {
   if (simple.kind == selector_simple_kind::universal) {
     return not is_non_element_node(node);
   }
-  if (node == nullptr || is_non_element_node(node)) {
-    return false;
-  }
+  if (node == nullptr || is_non_element_node(node)) return false;
   switch (simple.kind) {
   case selector_simple_kind::type:
+    if (simple.tag_id != LXB_TAG__UNDEF) return lxb_dom_node_tag_id(const_cast<lxb_dom_node_t*>(node)) == simple.tag_id;
     return iequals(node_qualified_name(node), simple.value);
   case selector_simple_kind::id:
     return get_attr_value(node, "id") == simple.value;
   case selector_simple_kind::class_name:
     return has_class(node, simple.value);
   case selector_simple_kind::attribute: {
-    auto const value = get_attr_value(node, simple.name);
-    if (not value.has_value()) return false;
-    return match_attribute(*value, simple.value, simple.attribute_match);
+    auto const v = get_attr_value(node, simple.name);
+    if (!v.has_value()) return false;
+    return match_attribute(*v, simple.value, simple.attribute_match);
   }
-  default:
-    return false;
+  default: return false;
   }
 }
 
@@ -45,78 +43,81 @@ namespace detail {
 template <std::size_t Max>
 [[nodiscard]] inline auto match_runtime_compound(
   lxb_dom_node_t* node,
-  runtime_compound_spec<Max> const& compound) noexcept -> bool {
+  selector_spec<Max> const& spec,
+  std::size_t compound_idx) noexcept -> bool {
   if (node == nullptr || is_non_element_node(node)) return false;
-  if (compound.simple_count == 0) return false;
-  for (auto i = std::size_t{0}; i < compound.simple_count; ++i) {
-    if (not match_runtime_simple(node, compound.simples[i])) return false;
+  auto const& c = spec.compounds[compound_idx];
+  if (c.simple_count == 0) return false;
+  for (auto i = std::size_t{0}; i < c.simple_count; ++i) {
+    if (!match_runtime_simple(node, spec.simples[c.simple_start + i])) return false;
   }
   return true;
 }
 
-// Recursive right-to-left chain matching (loop-based)
+// Recursive right-to-left chain matching (flat)
 template <std::size_t Max>
 [[nodiscard]] inline auto match_runtime_chain(
   lxb_dom_node_t* node,
-  runtime_group_spec<Max> const& group,
-  std::size_t index) noexcept -> bool {
-  if (node == nullptr || index >= group.compound_count) return false;
-
-  if (not match_runtime_compound(node, group.compounds[index])) return false;
-
-  if (index == 0) return true;
-
-  auto const relation = group.compounds[index].relation;
+  selector_spec<Max> const& spec,
+  std::size_t group_idx,
+  std::size_t compound_pos) noexcept -> bool {
+  if (node == nullptr) return false;
+  auto const& g = spec.groups[group_idx];
+  if (compound_pos >= g.compound_count) return false;
+  auto const compound_idx = g.compound_start + compound_pos;
+  if (!match_runtime_compound(node, spec, compound_idx)) return false;
+  if (compound_pos == 0) return true;
+  auto const relation = spec.compounds[compound_idx].relation;
   switch (relation) {
   case selector_combinator::child:
-    return match_runtime_chain(parent_element(node), group, index - 1);
+    return match_runtime_chain(parent_element(node), spec, group_idx, compound_pos - 1);
   case selector_combinator::adjacent_sibling:
-    return match_runtime_chain(prev_element_sibling(node), group, index - 1);
+    return match_runtime_chain(prev_element_sibling(node), spec, group_idx, compound_pos - 1);
   case selector_combinator::following_sibling:
     for (auto* prev = prev_element_sibling(node); prev != nullptr; prev = prev_element_sibling(prev)) {
-      if (match_runtime_chain(prev, group, index - 1)) return true;
+      if (match_runtime_chain(prev, spec, group_idx, compound_pos - 1)) return true;
     }
     return false;
   case selector_combinator::descendant:
-    for (auto* ancestor = parent_element(node); ancestor != nullptr; ancestor = parent_element(ancestor)) {
-      if (match_runtime_chain(ancestor, group, index - 1)) return true;
+    for (auto* anc = parent_element(node); anc != nullptr; anc = parent_element(anc)) {
+      if (match_runtime_chain(anc, spec, group_idx, compound_pos - 1)) return true;
     }
     return false;
   }
   return false;
 }
 
-// Match one group
 template <std::size_t Max>
 [[nodiscard]] inline auto match_runtime_group(
   lxb_dom_node_t* node,
-  runtime_group_spec<Max> const& group) noexcept -> bool {
-  if (group.compound_count == 0) return false;
-  return match_runtime_chain(node, group, group.compound_count - 1);
+  selector_spec<Max> const& spec,
+  std::size_t group_idx) noexcept -> bool {
+  auto const& g = spec.groups[group_idx];
+  if (g.compound_count == 0) return false;
+  return match_runtime_chain(node, spec, group_idx, g.compound_count - 1);
 }
 
-// Match all groups (OR)
 template <std::size_t Max>
 [[nodiscard]] inline auto match_runtime_selector(
   lxb_dom_node_t* node,
-  runtime_selector_spec<Max> const& selector) noexcept -> bool {
+  selector_spec<Max> const& spec) noexcept -> bool {
   if (node == nullptr) return false;
-  for (auto i = std::size_t{0}; i < selector.group_count; ++i) {
-    if (match_runtime_group(node, selector.groups[i])) return true;
+  for (auto i = std::size_t{0}; i < spec.group_count; ++i) {
+    if (match_runtime_group(node, spec, i)) return true;
   }
   return false;
 }
 
-// --- Spec-based scan cores (パース済み spec を走査する共通経路) ---
+// --- Spec-based scan cores ---
 
 template <std::size_t Max>
 [[nodiscard]] inline auto query_selector_spec_first(
   lxb_dom_node_t* node,
-  runtime_selector_spec<Max> const& spec) -> lxb_dom_node_t* {
+  selector_spec<Max> const& spec) -> lxb_dom_node_t* {
   if (node == nullptr) return nullptr;
-  for (auto* current : node_walker{node}) {
-    if (is_non_element_node(current)) continue;
-    if (match_runtime_selector(current, spec)) return current;
+  for (auto* cur : node_walker{node}) {
+    if (is_non_element_node(cur)) continue;
+    if (match_runtime_selector(cur, spec)) return cur;
   }
   return nullptr;
 }
@@ -124,13 +125,37 @@ template <std::size_t Max>
 template <std::size_t Max>
 [[nodiscard]] inline auto query_selector_spec_all(
   lxb_dom_node_t* node,
-  runtime_selector_spec<Max> const& spec) -> std::vector<lxb_dom_node_t*> {
+  selector_spec<Max> const& spec) -> std::vector<lxb_dom_node_t*> {
   auto result = std::vector<lxb_dom_node_t*>{};
   if (node == nullptr) return result;
   result.reserve(16);
-  for (auto* current : node_walker{node}) {
-    if (is_non_element_node(current)) continue;
-    if (match_runtime_selector(current, spec)) result.push_back(current);
+  for (auto* cur : node_walker{node}) {
+    if (is_non_element_node(cur)) continue;
+    if (match_runtime_selector(cur, spec)) result.push_back(cur);
+  }
+  return result;
+}
+
+// Helpers for subtree scan when id is not in last compound
+template <std::size_t Max>
+[[nodiscard]] inline auto query_selector_spec_first_subtree(
+  lxb_dom_node_t* subtree_root,
+  selector_spec<Max> const& spec) -> lxb_dom_node_t* {
+  for (auto* cur : node_walker{subtree_root}) {
+    if (is_non_element_node(cur)) continue;
+    if (match_runtime_selector(cur, spec)) return cur;
+  }
+  return nullptr;
+}
+template <std::size_t Max>
+[[nodiscard]] inline auto query_selector_spec_all_subtree(
+  lxb_dom_node_t* subtree_root,
+  selector_spec<Max> const& spec) -> std::vector<lxb_dom_node_t*> {
+  auto result = std::vector<lxb_dom_node_t*>{};
+  result.reserve(16);
+  for (auto* cur : node_walker{subtree_root}) {
+    if (is_non_element_node(cur)) continue;
+    if (match_runtime_selector(cur, spec)) result.push_back(cur);
   }
   return result;
 }
@@ -140,85 +165,93 @@ template <std::size_t Max>
   lxb_dom_node_t* node,
   std::string_view selector) -> lxb_dom_node_t* {
   if (node == nullptr || selector.empty()) return nullptr;
-
   auto spec = parse_runtime_selector_auto(selector);
   return query_selector_spec_first(node, spec);
 }
 
-// Public API: query_selector_all (runtime)
 [[nodiscard]] inline auto query_selector_all_runtime(
   lxb_dom_node_t* node,
   std::string_view selector) -> std::vector<lxb_dom_node_t*> {
   if (node == nullptr || selector.empty()) return {};
-
   auto spec = parse_runtime_selector_auto(selector);
   return query_selector_spec_all(node, spec);
 }
 
-// --- Runtime id prefilter helpers ---
+// --- Runtime id prefilter helpers (expanded) ---
+struct runtime_id_prefilter {
+  std::string_view value{};
+  std::size_t compound_idx{}; // index within group (0-based)
+  std::size_t group_idx{};
+  bool found{false};
+  bool is_last{false};
+};
+
 template <std::size_t Max>
-[[nodiscard]] auto runtime_get_id_prefilter(
-  runtime_selector_spec<Max> const& spec) -> std::string const* {
-  if (spec.group_count == 0) return nullptr;
+[[nodiscard]] inline auto runtime_get_id_prefilter(
+  selector_spec<Max> const& spec) -> runtime_id_prefilter {
+  if (spec.group_count != 1) return {};
   auto const& g = spec.groups[0];
-  if (g.compound_count == 0) return nullptr;
-  auto const& c = g.compounds[g.compound_count - 1];
-  for (auto i = std::size_t{}; i < c.simple_count; ++i) {
-    if (c.simples[i].kind == selector_simple_kind::id) {
-      return &c.simples[i].value;
+  // search from rightmost compound to leftmost for id
+  for (auto ci = g.compound_count; ci-- > 0; ) {
+    auto const cidx = g.compound_start + ci;
+    auto const& c = spec.compounds[cidx];
+    for (auto si = std::size_t{0}; si < c.simple_count; ++si) {
+      auto const& s = spec.simples[c.simple_start + si];
+      if (s.kind == selector_simple_kind::id) {
+        return {s.value, ci, 0, true, ci == g.compound_count - 1};
+      }
     }
   }
-  return nullptr;
+  return {};
 }
 
-// query_selector_runtime with index
-// NOTE: インデックスは構築時のスナップショットです。構築後に DOM を編集した場合、
-//       結果は古いノードを指す可能性があります。検索の直前に rebuild してください。
+// query_selector_runtime with index (expanded: supports id in any compound)
 [[nodiscard]] inline auto query_selector_runtime(
   lxb_dom_node_t* node,
   std::string_view selector,
   document_id_index const& index) -> lxb_dom_node_t* {
   if (node == nullptr || selector.empty()) return nullptr;
-
   auto spec = parse_runtime_selector_auto(selector);
   if (spec.group_count == 0) return nullptr;
-
-  auto const* id_value = runtime_get_id_prefilter(spec);
-  if (id_value != nullptr && spec.group_count == 1) {
-    auto* found = index.find(*id_value);
-    // インデックスは文書全体で構築されることがあるため、検索スコープ
-    // （開始ノード自身 + その子孫）内のノードか必ず確認する。
-    if (found != nullptr && is_descendant_of(found, node) &&
-        match_runtime_selector(found, spec)) {
-      return found;
+  auto const pf = runtime_get_id_prefilter(spec);
+  if (pf.found) {
+    auto* found = index.find(pf.value);
+    if (found == nullptr || !is_descendant_of(found, node)) return nullptr;
+    if (pf.is_last) {
+      if (match_runtime_selector(found, spec)) return found;
+      return nullptr;
+    } else {
+      // id is not in rightmost compound: limit search to subtree of found
+      return query_selector_spec_first_subtree(found, spec);
     }
-    return nullptr;
   }
-
   return query_selector_spec_first(node, spec);
 }
 
-// query_selector_all_runtime with index
 [[nodiscard]] inline auto query_selector_all_runtime(
   lxb_dom_node_t* node,
   std::string_view selector,
   document_id_index const& index) -> std::vector<lxb_dom_node_t*> {
   if (node == nullptr || selector.empty()) return {};
-
   auto spec = parse_runtime_selector_auto(selector);
   if (spec.group_count == 0) return {};
-
-  auto const* id_value = runtime_get_id_prefilter(spec);
-  if (id_value != nullptr && spec.group_count == 1 && spec.groups[0].compound_count == 1) {
-    // Single compound with id: at most 1 result (HTML の id は文書内で一意と想定)
-    auto* found = index.find(*id_value);
-    if (found != nullptr && is_descendant_of(found, node) &&
-        match_runtime_selector(found, spec)) {
-      return {found};
+  auto const pf = runtime_get_id_prefilter(spec);
+  if (pf.found) {
+    auto* found = index.find(pf.value);
+    if (found == nullptr || !is_descendant_of(found, node)) return {};
+    if (pf.is_last && spec.groups[0].compound_count == 1) {
+      if (match_runtime_selector(found, spec)) return {found};
+      return {};
     }
-    return {};
+    if (pf.is_last) {
+      // last compound has id but group has multiple compounds: still single-node check suffices
+      // because rightmost compound is the id; if that node matches whole chain, it's unique.
+      if (match_runtime_selector(found, spec)) return {found};
+      return {};
+    } else {
+      return query_selector_spec_all_subtree(found, spec);
+    }
   }
-
   return query_selector_spec_all(node, spec);
 }
 
@@ -226,33 +259,18 @@ template <std::size_t Max>
 
 // --- Public runtime query API ---
 
-/**
- * @brief CSS セレクタにマッチする最初の要素を返します。
- */
 [[nodiscard]] auto inline query_selector(lxb_dom_node_t* node, std::string_view selector) -> lxb_dom_node_t* {
   return detail::query_selector_runtime(node, selector);
 }
-
-/**
- * @brief CSS セレクタにマッチするすべての要素を返します。
- */
 [[nodiscard]] auto inline query_selector_all(lxb_dom_node_t* node, std::string_view selector) -> std::vector<lxb_dom_node_t*> {
   return detail::query_selector_all_runtime(node, selector);
 }
-
-/**
- * @brief ID 逆引きインデックスを利用して CSS セレクタにマッチする最初の要素を返します。
- */
 [[nodiscard]] auto inline query_selector(
   lxb_dom_node_t* node,
   std::string_view selector,
   document_id_index const& index) -> lxb_dom_node_t* {
   return detail::query_selector_runtime(node, selector, index);
 }
-
-/**
- * @brief ID 逆引きインデックスを利用して CSS セレクタにマッチする全要素を返します。
- */
 [[nodiscard]] auto inline query_selector_all(
   lxb_dom_node_t* node,
   std::string_view selector,

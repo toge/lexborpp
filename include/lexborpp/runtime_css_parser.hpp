@@ -3,7 +3,6 @@
 
 #include <array>
 #include <cstddef>
-#include <string>
 #include <string_view>
 
 #include "lexbor/dom/dom.h"
@@ -13,143 +12,83 @@
 namespace lexborpp {
 namespace detail {
 
-// --- Owned spec types (std::string instead of std::string_view) ---
+// --- Flat spec reuse (same as NTTP) ---
+// Runtime now reuses the flat selector_spec<Max> from nttp_parser.hpp.
+// Old triple-nested array<array<array<...>>> (137KB) is gone -> ~3KB for Max=32.
+template <std::size_t Max>
+using runtime_selector_spec = selector_spec<Max>;
 
-struct runtime_simple_spec {
-  selector_simple_kind kind{selector_simple_kind::universal};
-  std::string name{};
-  std::string value{};
-  selector_attribute_match attribute_match{selector_attribute_match::exists};
-};
+// Keep legacy aliases for external code that may have used detail::runtime_simple_spec
+using runtime_simple_spec = selector_simple_spec;
+template <std::size_t Max>
+using runtime_compound_spec = selector_compound_info;
+template <std::size_t Max>
+using runtime_group_spec = selector_group_info;
+
+// --- Runtime parsing (bool-based, no throw) ---
 
 template <std::size_t Max>
-struct runtime_compound_spec {
-  std::array<runtime_simple_spec, Max> simples{};
-  std::size_t simple_count{};
-  selector_combinator relation{selector_combinator::descendant};
-};
-
-template <std::size_t Max>
-struct runtime_group_spec {
-  std::array<runtime_compound_spec<Max>, Max> compounds{};
-  std::size_t compound_count{};
-};
-
-template <std::size_t Max>
-struct runtime_selector_spec {
-  std::array<runtime_group_spec<Max>, Max> groups{};
-  std::size_t group_count{};
-};
-
-// --- Runtime parsing functions (non-template) ---
-
-// Parse one simple selector into a compound; returns false on parse failure.
 constexpr auto parse_runtime_simple_selector(
   std::string_view input,
   std::size_t& pos,
-  auto& compound) -> bool {
-  auto append = [&]<typename T>(T&& simple) {
-    if (compound.simple_count >= compound.simples.size()) {
-      return false; // too complex
-    }
-    compound.simples[compound.simple_count++] = std::forward<T>(simple);
+  selector_spec<Max>& result) -> bool {
+  auto append = [&](auto&& simple) -> bool {
+    if (result.simple_count >= result.simples.size()) return false;
+    result.simples[result.simple_count++] = std::forward<decltype(simple)>(simple);
     return true;
   };
-
-  if (pos >= input.size()) {
-    return false; // ended unexpectedly
-  }
-
+  if (pos >= input.size()) return false;
   if (input[pos] == '*') {
     ++pos;
-    return append(runtime_simple_spec{.kind = selector_simple_kind::universal});
+    return append(selector_simple_spec{.kind = selector_simple_kind::universal});
   }
-
   if (input[pos] == '#') {
     ++pos;
     auto const value = parse_name(input, pos);
-    if (value.empty()) {
-      return false; // id must not be empty
-    }
-    return append(runtime_simple_spec{.kind = selector_simple_kind::id, .value = std::string(value)});
+    if (value.empty()) return false;
+    return append(selector_simple_spec{.kind = selector_simple_kind::id, .value = value});
   }
-
   if (input[pos] == '.') {
     ++pos;
     auto const value = parse_name(input, pos);
-    if (value.empty()) {
-      return false; // class must not be empty
-    }
-    return append(runtime_simple_spec{.kind = selector_simple_kind::class_name, .value = std::string(value)});
+    if (value.empty()) return false;
+    return append(selector_simple_spec{.kind = selector_simple_kind::class_name, .value = value});
   }
-
   if (input[pos] == '[') {
     ++pos;
     skip_spaces(input, pos);
     auto const name = parse_name(input, pos);
-    if (name.empty()) {
-      return false; // attribute name must not be empty
-    }
+    if (name.empty()) return false;
     skip_spaces(input, pos);
-
     auto match = selector_attribute_match::exists;
     auto value = std::string_view{};
     if (pos < input.size() && input[pos] != ']') {
-      if (input[pos] == '=' ) {
-        match = selector_attribute_match::equals;
-        ++pos;
-      } else if (pos + 1 < input.size() && input[pos + 1] == '=' && input[pos] == '~') {
-        match = selector_attribute_match::includes;
-        pos += 2;
-      } else if (pos + 1 < input.size() && input[pos + 1] == '=' && input[pos] == '|') {
-        match = selector_attribute_match::dash;
-        pos += 2;
-      } else if (pos + 1 < input.size() && input[pos + 1] == '=' && input[pos] == '^') {
-        match = selector_attribute_match::prefix;
-        pos += 2;
-      } else if (pos + 1 < input.size() && input[pos + 1] == '=' && input[pos] == '$') {
-        match = selector_attribute_match::suffix;
-        pos += 2;
-      } else if (pos + 1 < input.size() && input[pos + 1] == '=' && input[pos] == '*') {
-        match = selector_attribute_match::substring;
-        pos += 2;
-      } else {
-        return false; // unsupported operator
-      }
-
+      if (input[pos] == '=') { match = selector_attribute_match::equals; ++pos; }
+      else if (pos + 1 < input.size() && input[pos+1] == '=' && input[pos] == '~') { match = selector_attribute_match::includes; pos+=2; }
+      else if (pos + 1 < input.size() && input[pos+1] == '=' && input[pos] == '|') { match = selector_attribute_match::dash; pos+=2; }
+      else if (pos + 1 < input.size() && input[pos+1] == '=' && input[pos] == '^') { match = selector_attribute_match::prefix; pos+=2; }
+      else if (pos + 1 < input.size() && input[pos+1] == '=' && input[pos] == '$') { match = selector_attribute_match::suffix; pos+=2; }
+      else if (pos + 1 < input.size() && input[pos+1] == '=' && input[pos] == '*') { match = selector_attribute_match::substring; pos+=2; }
+      else return false;
       skip_spaces(input, pos);
-      if (pos >= input.size()) {
-        return false; // attribute value missing
-      }
-
+      if (pos >= input.size()) return false;
       auto was_quoted = false;
       if (input[pos] == '"' || input[pos] == '\'') {
         was_quoted = true;
         auto const quoted = parse_quoted_value(input, pos);
-        if (not quoted.has_value()) {
-          return false; // missing closing quote
-        }
+        if (!quoted.has_value()) return false;
         value = *quoted;
       } else {
         value = parse_name(input, pos);
       }
-
-      // Empty values are only valid when quoted (`[attr=""]`); `[attr=]` is invalid.
-      if (value.empty() && !was_quoted) {
-        return false; // attribute value must not be empty
-      }
+      if (value.empty() && !was_quoted) return false;
       skip_spaces(input, pos);
     }
-
-    if (pos >= input.size() || input[pos] != ']') {
-      return false; // attribute selector must end with ']'
-    }
+    if (pos >= input.size() || input[pos] != ']') return false;
     ++pos;
-    return append(runtime_simple_spec{.kind = selector_simple_kind::attribute, .name = std::string(name), .value = std::string(value), .attribute_match = match});
+    return append(selector_simple_spec{.kind = selector_simple_kind::attribute, .name = name, .value = value, .attribute_match = match});
   }
-
   if (input[pos] == ':') {
-    // pseudo-classes not supported; consume the name to avoid infinite loop
     ++pos;
     parse_name(input, pos);
     if (pos < input.size() && input[pos] == '(') {
@@ -161,108 +100,83 @@ constexpr auto parse_runtime_simple_selector(
     }
     return false;
   }
-
   auto const value = parse_name(input, pos);
-  if (value.empty()) {
-    return false; // token invalid
-  }
-  return append(runtime_simple_spec{.kind = selector_simple_kind::type, .value = std::string(value)});
+  if (value.empty()) return false;
+  return append(selector_simple_spec{.kind = selector_simple_kind::type, .value = value, .tag_id = lookup_tag_id(value)});
 }
 
-// Parse one compound selector; returns false on parse failure.
-constexpr auto parse_runtime_compound_selector(
+template <std::size_t Max>
+constexpr auto parse_runtime_compound_elements(
   std::string_view input,
   std::size_t& pos,
-  auto& group,
-  selector_combinator relation) -> bool {
-  if (group.compound_count >= group.compounds.size()) {
-    return false; // too complex
-  }
-
-  auto& compound = group.compounds[group.compound_count];
-  compound.simple_count = 0;
-  compound.relation = relation;
-
-  if (pos >= input.size()) {
-    return false; // ended unexpectedly
-  }
-
-  if (not parse_runtime_simple_selector(input, pos, compound)) {
-    return false; // parse error in first simple
-  }
-
+  selector_spec<Max>& result) -> bool {
+  if (pos >= input.size()) return false;
+  if (!parse_runtime_simple_selector<Max>(input, pos, result)) return false;
   while (pos < input.size()) {
     if (is_space(input[pos]) || input[pos] == ',' || input[pos] == '>' ||
-        input[pos] == '+' || input[pos] == '~') {
-      break;
-    }
-
-    if (not is_simple_selector_start(input[pos])) {
-      return false; // token invalid
-    }
-
-    if (not parse_runtime_simple_selector(input, pos, compound)) {
-      return false;
-    }
+        input[pos] == '+' || input[pos] == '~') break;
+    if (!is_simple_selector_start(input[pos])) return false;
+    if (!parse_runtime_simple_selector<Max>(input, pos, result)) return false;
   }
-  ++group.compound_count;
   return true;
 }
 
-// Top-level parser; returns empty spec on parse failure (group_count == 0).
 template <std::size_t Max>
 [[nodiscard]] constexpr auto parse_runtime_selector(
-  std::string_view input) -> runtime_selector_spec<Max> {
-  auto result = runtime_selector_spec<Max>{};
+  std::string_view input) -> selector_spec<Max> {
+  auto result = selector_spec<Max>{};
   auto pos = std::size_t{0};
-
   skip_spaces(input, pos);
-  if (pos >= input.size()) {
-    return result; // empty selector → empty spec
-  }
-
+  if (pos >= input.size()) return result;
   while (pos < input.size()) {
-    if (result.group_count >= result.groups.size()) {
-      break; // too complex, stop
-    }
-
+    if (result.group_count >= result.groups.size()) break;
     auto& group = result.groups[result.group_count];
+    group.compound_start = result.compound_count;
     group.compound_count = 0;
-
     auto relation = selector_combinator::descendant;
     while (true) {
-      if (not parse_runtime_compound_selector(input, pos, group, relation)) {
-        // parse error — discard the entire result
+      if (result.compound_count >= result.compounds.size()) {
         result.group_count = 0;
         return result;
       }
-
+      auto& compound = result.compounds[result.compound_count];
+      auto const simple_start = result.simple_count;
+      compound.simple_start = simple_start;
+      compound.relation = relation;
+      if (!parse_runtime_compound_elements<Max>(input, pos, result)) {
+        result.group_count = 0;
+        return result;
+      }
+      compound.simple_count = result.simple_count - simple_start;
+      ++result.compound_count;
+      ++group.compound_count;
       skip_spaces(input, pos);
       if (pos >= input.size()) break;
-
       if (input[pos] == ',') { ++pos; skip_spaces(input, pos); break; }
       if (input[pos] == '>') { relation = selector_combinator::child; ++pos; skip_spaces(input, pos); continue; }
       if (input[pos] == '+') { relation = selector_combinator::adjacent_sibling; ++pos; skip_spaces(input, pos); continue; }
       if (input[pos] == '~') { relation = selector_combinator::following_sibling; ++pos; skip_spaces(input, pos); continue; }
       if (is_simple_selector_start(input[pos])) { relation = selector_combinator::descendant; continue; }
-      break; // invalid token, stop
+      break;
     }
-
     if (group.compound_count == 0) break;
     ++result.group_count;
   }
-
   return result;
 }
 
-// Convenience; N=12 keeps stack usage ~100KB (12³ × ~80 bytes per simple).
-// Selectors longer than 256 characters are rejected (returning an empty spec,
-// which makes query_selector* report "no match"). This bound exists to keep
-// stack usage bounded; raise it only if you need longer selectors.
+// Convenience; Max=32 gives ~3KB stack, Max=12 was 137KB via triple nesting.
+// Keep 256-char limit as before.
 [[nodiscard]] inline auto parse_runtime_selector_auto(
-  std::string_view input) -> runtime_selector_spec<12> {
-  if (input.size() > 256) return runtime_selector_spec<12>{};
-  return parse_runtime_selector<12>(input);
+  std::string_view input) -> selector_spec<32> {
+  if (input.size() > 256) return selector_spec<32>{};
+  return parse_runtime_selector<32>(input);
+}
+
+// Legacy alias for code that used runtime_selector_spec<12>
+template <std::size_t Max>
+constexpr auto parse_runtime_selector_legacy(std::string_view input) -> runtime_selector_spec<Max> {
+  return parse_runtime_selector<Max>(input);
 }
 
 }  // namespace detail
