@@ -93,11 +93,21 @@ auto constexpr inline is_non_element_node(lxb_dom_node_t const* node) noexcept -
 /**
  * @brief ノードを要素型に変換します（キャスト）。
  */
-[[nodiscard]] auto constexpr inline as_element(lxb_dom_node_t const* node) noexcept -> lxb_dom_element_t* {
+[[nodiscard]] auto constexpr inline as_element(lxb_dom_node_t* node) noexcept -> lxb_dom_element_t* {
   if (node == nullptr) {
     return nullptr;
   }
-  return lxb_dom_interface_element(const_cast<lxb_dom_node_t*>(node));
+  return lxb_dom_interface_element(node);
+}
+
+/**
+ * @brief ノードを要素型（const）に変換します（キャスト）。
+ */
+[[nodiscard]] auto constexpr inline as_element(lxb_dom_node_t const* node) noexcept -> lxb_dom_element_t const* {
+  if (node == nullptr) {
+    return nullptr;
+  }
+  return reinterpret_cast<lxb_dom_element_t const*>(node);
 }
 
 // --- Walkers ---
@@ -344,8 +354,10 @@ auto inline get_attr_value(lxb_dom_node_t* node, std::string_view attr_name) noe
  * @param node 確認対象のノードです。
  * @param class_names クラス名のリストです。
  * @return bool すべてのクラスを持っている場合は true、そうでない場合は false を返します。
+ * @note 空リスト（`has_class(node, {})`)は false を返します。
+ *       数学的な全称量化（vacuous truth）とは異なる挙動です。
  */
-[[nodiscard]] constexpr auto inline has_class(lxb_dom_node_t const* node, std::initializer_list<std::string_view> class_names) noexcept -> bool {
+[[nodiscard]] auto inline has_class(lxb_dom_node_t const* node, std::initializer_list<std::string_view> class_names) noexcept -> bool {
   if (class_names.size() == 0 or node == nullptr) {
     return false;
   }
@@ -643,7 +655,7 @@ auto inline get_first_child_text(lxb_dom_node_t* node) noexcept -> std::optional
  * @param sep 各テキストの間に挿入する区切り文字（デフォルトは空文字列）です。
  * @return std::optional<std::string> 連結文字列を返します。テキスト子が無い場合は std::nullopt を返します。
  */
-auto inline get_all_children_text(lxb_dom_node_t* node, std::string_view const sep = "") noexcept -> std::optional<std::string> {
+auto inline get_all_children_text(lxb_dom_node_t* node, std::string_view const sep = "") -> std::optional<std::string> {
   if (node == nullptr) {
     return std::nullopt;
   }
@@ -667,10 +679,13 @@ auto inline get_all_children_text(lxb_dom_node_t* node, std::string_view const s
 }
 
 /**
- * @brief 述語に一致する後続ノードを走査して最初の 1 件を返します。
+ * @brief 指定ノード自身とその子孫を深さ優先で走査し、述語に最初に一致したノードを返します。
+ *
+ * @warning 名前に "following" と入っていますが CSS の "following 軸"（後続兄弟）ではありません。
+ *          内部では node_walker を使った深さ優先探索を行い、開始ノード自身も対象に含まれます。
  *
  * @tparam Op ノードを判定する述語型です。
- * @param node 検索開始ノードです。
+ * @param node 検索開始ノード（自身を含む）です。
  * @param op 判定関数です。
  * @return lxb_dom_node_t* 一致したノードを返します。見つからない場合は nullptr を返します。
  */

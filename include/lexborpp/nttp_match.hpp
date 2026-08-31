@@ -188,26 +188,6 @@ template <detail::fixed_string Selector>
 }
 
 // --- Compile-time id prefilter extraction ---
-template <detail::fixed_string Selector>
-constexpr auto compiled_id_prefilter() -> std::string_view {
-  constexpr auto& spec = compiled_selector_v<Selector>;
-  if constexpr (spec.group_count == 0) {
-    return {};
-  } else {
-    constexpr auto& g = spec.groups[0];
-    if constexpr (g.compound_count == 0) {
-      return {};
-    } else {
-      constexpr auto& c = spec.compounds[g.compound_start + g.compound_count - 1];
-      for (auto i = std::size_t{}; i < c.simple_count; ++i) {
-        if (spec.simples[c.simple_start + i].kind == selector_simple_kind::id) {
-          return spec.simples[c.simple_start + i].value;
-        }
-      }
-      return {};
-    }
-  }
-}
 
 struct nttp_id_info {
   std::string_view value{};

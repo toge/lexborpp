@@ -166,7 +166,9 @@ template <std::size_t Max>
 }
 
 // Convenience; Max=32 gives ~3KB stack, Max=12 was 137KB via triple nesting.
-// Keep 256-char limit as before.
+// セレクタ文字列の長さは最大 256 文字です。超過した場合は空の spec（0 件ヒット扱い）を
+// 返すのみでエラーを発しません。256 文字を超えるセレクタは parse_runtime_selector<N>
+// を直接使用してください。
 [[nodiscard]] inline auto parse_runtime_selector_auto(
   std::string_view input) -> selector_spec<32> {
   if (input.size() > 256) return selector_spec<32>{};

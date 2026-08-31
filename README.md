@@ -276,6 +276,7 @@ ctest --test-dir build -V
 ## 注意点
 
 - `has_class()` と `get_elements_by_class()` は `class="alpha beta"` をトークン分割して判定します
+- `has_class(node, {})` は空リストを渡すと **false** を返します（数学的な vacuous truth とは異なります）
 - `get_first_element_by_class()` と `clazz<"...">` は `class` 属性文字列の完全一致です
 - `get_first_child_text()` / `get_all_children_text()` は直下のテキストノードだけを対象にします
 - `get_deep_text()` は子孫全体のテキストを対象にします

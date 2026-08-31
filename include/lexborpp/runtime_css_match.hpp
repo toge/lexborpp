@@ -136,30 +136,6 @@ template <std::size_t Max>
   return result;
 }
 
-// Helpers for subtree scan when id is not in last compound
-template <std::size_t Max>
-[[nodiscard]] inline auto query_selector_spec_first_subtree(
-  lxb_dom_node_t* subtree_root,
-  selector_spec<Max> const& spec) -> lxb_dom_node_t* {
-  for (auto* cur : node_walker{subtree_root}) {
-    if (is_non_element_node(cur)) continue;
-    if (match_runtime_selector(cur, spec)) return cur;
-  }
-  return nullptr;
-}
-template <std::size_t Max>
-[[nodiscard]] inline auto query_selector_spec_all_subtree(
-  lxb_dom_node_t* subtree_root,
-  selector_spec<Max> const& spec) -> std::vector<lxb_dom_node_t*> {
-  auto result = std::vector<lxb_dom_node_t*>{};
-  result.reserve(16);
-  for (auto* cur : node_walker{subtree_root}) {
-    if (is_non_element_node(cur)) continue;
-    if (match_runtime_selector(cur, spec)) result.push_back(cur);
-  }
-  return result;
-}
-
 // Public API: query_selector (runtime)
 [[nodiscard]] inline auto query_selector_runtime(
   lxb_dom_node_t* node,
@@ -222,7 +198,7 @@ template <std::size_t Max>
       return nullptr;
     } else {
       // id is not in rightmost compound: limit search to subtree of found
-      return query_selector_spec_first_subtree(found, spec);
+      return query_selector_spec_first(found, spec);
     }
   }
   return query_selector_spec_first(node, spec);
@@ -249,7 +225,7 @@ template <std::size_t Max>
       if (match_runtime_selector(found, spec)) return {found};
       return {};
     } else {
-      return query_selector_spec_all_subtree(found, spec);
+      return query_selector_spec_all(found, spec);
     }
   }
   return query_selector_spec_all(node, spec);
