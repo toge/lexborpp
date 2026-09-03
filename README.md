@@ -35,7 +35,27 @@ Lexbor 自体は C 製の高速な HTML パーサです。公式ドキュメン�
 テストを実行する場合は追加で Catch2 が必要です。リポジトリの `vcpkg.json` には次の依存関係が入っています。
 
 - `lexbor`
-- `catch2`
+- `catch2` (`wasm32` では除外。wasip1 の `signal.h` がシグナル未対応のため)
+
+## WASI Minimal モード
+
+wasip1 (`wasm32-wasip1` / wasi-sdk) 向けに、例外なしでビルドできるモードです。
+`LEXBORPP_WASI_MINIMAL` 定義時は NTTP パーサの例外送出が `std::abort()` に置き換わり、
+`-fno-exceptions` でライブラリ全体 (NTTP 版セレクタ含む) がビルドできます。
+コンパイル時評価での不正セレクタは従来どおりコンパイルエラーになります。
+
+```bash
+cmake -B build-wasi -S . -G Ninja \
+  -DCMAKE_TOOLCHAIN_FILE=$HOME/vcpkg/scripts/buildsystems/vcpkg.cmake \
+  -DVCPKG_TARGET_TRIPLET=wasm32-wasip1 \
+  -DVCPKG_OVERLAY_TRIPLETS=$PWD/triplets \
+  -DVCPKG_CHAINLOAD_TOOLCHAIN_FILE=/opt/wasi-sdk/share/cmake/wasi-sdk-p1.cmake \
+  -DENABLE_WASI_MINIMAL=ON
+cmake --build build-wasi
+wasmedge build-wasi/test/smoke_wasi_minimal
+```
+
+`triplets/wasm32-wasip1.cmake` を同梱しているので、`-DVCPKG_OVERLAY_TRIPLETS=$PWD/triplets` で利用できます。
 
 ## 導入方法
 

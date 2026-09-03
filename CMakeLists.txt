@@ -7,7 +7,12 @@ include(CTest)
 
 option(BUILD_TEST "Build tests" ON)
 option(BUILD_BENCH "Build benchmarks" ON)
+option(ENABLE_WASI_MINIMAL "Enable WASI minimal (no exceptions) mode - wasi-sdk wasm32-wasip1 assumed" OFF)
 option(LEXBORPP_NATIVE_ARCH "Build with -march=native / /Ox for maximum speed (not portable across machines)" OFF)
+
+if(ENABLE_WASI_MINIMAL)
+  add_compile_definitions(LEXBORPP_WASI_MINIMAL=1)
+endif()
 
 ## 警告フラグ・最適化は top-level ビルドのときだけ適用する。
 ## add_subdirectory() で取り込む利用者のビルド設定を汚染しないようにするため。
@@ -122,7 +127,7 @@ if(BUILD_TEST AND PROJECT_IS_TOP_LEVEL)
     add_subdirectory(test)
 endif()
 
-if(BUILD_BENCH AND PROJECT_IS_TOP_LEVEL)
+if(BUILD_BENCH AND PROJECT_IS_TOP_LEVEL AND NOT ENABLE_WASI_MINIMAL)
     add_executable(bench_css_selector benchmark/bench_css_selector.cpp)
     target_link_libraries(bench_css_selector PRIVATE lexborpp::lexborpp)
     target_compile_features(bench_css_selector PRIVATE ${LEXBORPP_CXX_STD})

@@ -10,14 +10,14 @@ class html_document_fixture {
 public:
   explicit html_document_fixture(std::string_view html) : document(lxb_html_document_create()) {
     if (document == nullptr) {
-      throw std::runtime_error("Failed to create HTML document");
+      LEXBORPP_THROW(std::runtime_error("Failed to create HTML document"));
     }
 
     auto const status = lxb_html_document_parse(document, reinterpret_cast<lxb_char_t const*>(html.data()), html.size());
     if (status != LXB_STATUS_OK) {
       lxb_html_document_destroy(document);
       document = nullptr;
-      throw std::runtime_error("Failed to parse HTML document");
+      LEXBORPP_THROW(std::runtime_error("Failed to parse HTML document"));
     }
   }
 

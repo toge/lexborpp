@@ -1,6 +1,7 @@
 #ifndef LEXBORPP_HPP_
 #define LEXBORPP_HPP_
 
+#include "lexborpp/config.hpp"
 #include "lexborpp/core.hpp"
 #include "lexborpp/tag_name.hpp"
 #include "lexborpp/serialize_runtime.hpp"
