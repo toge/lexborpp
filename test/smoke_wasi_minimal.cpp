@@ -29,11 +29,15 @@ auto main() -> int {
   CHECK(doc.has_value(), "parse_html");
   auto* root = lexborpp::get_root(doc.value());
 
-  // runtime selector
-  auto* featured = lexborpp::query_selector(root, "li.featured");
+  // runtime selector (returns std::expected)
+  auto featured_result = lexborpp::query_selector(root, "li.featured");
+  CHECK(featured_result.has_value(), "runtime query_selector has_value");
+  auto* featured = featured_result.value();
   CHECK(featured != nullptr, "runtime query_selector");
   CHECK(lexborpp::get_deep_text(featured) == "second", "get_deep_text");
-  auto items = lexborpp::query_selector_all(root, "li.item");
+  auto items_result = lexborpp::query_selector_all(root, "li.item");
+  CHECK(items_result.has_value(), "runtime query_selector_all has_value");
+  auto items = items_result.value();
   CHECK(items.size() == 2, "runtime query_selector_all");
 
   // NTTP selector (例外なしでもコンパイル・実行できること)

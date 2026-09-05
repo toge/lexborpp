@@ -101,7 +101,8 @@ constexpr auto is_space(char const c) noexcept -> bool {
 constexpr auto is_name_terminator(char const c) noexcept -> bool {
   return c == '\0' || is_space(c) || c == ',' || c == '>' || c == '+' || c == '~' ||
          c == '[' || c == ']' || c == '#' || c == '.' || c == ':' || c == '(' || c == ')' ||
-         c == '"' || c == '\'' || c == '=' || c == '|' || c == '^' || c == '$' || c == '*';
+         c == '"' || c == '\'' || c == '=' || c == '|' || c == '^' || c == '$' || c == '*' ||
+         c == '!';
 }
 
 /**

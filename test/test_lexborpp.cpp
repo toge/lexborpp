@@ -139,36 +139,55 @@ TEST_CASE("lexborpp CSS selector and manipulation functions") {
   auto* root = lexborpp::get_root(doc_expected.value());
 
   SECTION("CSS selectors (query_selector)") {
-    auto* content = lexborpp::query_selector(root, "div#content");
+    auto content_result = lexborpp::query_selector(root, "div#content");
+    REQUIRE(content_result.has_value());
+    auto* content = content_result.value();
     REQUIRE(content != nullptr);
     REQUIRE(lexborpp::get_attr_value(content, "id") == "content");
 
-    auto* entry = lexborpp::query_selector(root, "div.entry");
-    REQUIRE(entry == content);
+    auto entry_result = lexborpp::query_selector(root, "div.entry");
+    REQUIRE(entry_result.has_value());
+    REQUIRE(entry_result.value() == content);
 
-    auto* bold = lexborpp::query_selector(root, "span > b");
+    auto bold_result = lexborpp::query_selector(root, "span > b");
+    REQUIRE(bold_result.has_value());
+    auto* bold = bold_result.value();
     REQUIRE(bold != nullptr);
     REQUIRE(lexborpp::get_deep_text(bold) == "Bold");
 
-    REQUIRE(lexborpp::query_selector(root, "non-existent") == nullptr);
-    REQUIRE(lexborpp::query_selector(root, "invalid[@selector") == nullptr);
-    REQUIRE(lexborpp::query_selector(nullptr, "div") == nullptr);
+    // 存在しないセレクタは expected に nullptr が入る
+    auto not_found = lexborpp::query_selector(root, "non-existent");
+    REQUIRE(not_found.has_value());
+    REQUIRE(not_found.value() == nullptr);
 
-    auto* self = lexborpp::query_selector(content, "div#content");
-    REQUIRE(self == content);
+    // 不正なセレクタは unexpected
+    REQUIRE_FALSE(lexborpp::query_selector(root, "invalid[@selector").has_value());
+    REQUIRE_FALSE(lexborpp::query_selector(nullptr, "div").has_value());
+
+    auto self_result = lexborpp::query_selector(content, "div#content");
+    REQUIRE(self_result.has_value());
+    REQUIRE(self_result.value() == content);
   }
 
   SECTION("CSS selectors (query_selector_all)") {
-    auto ps = lexborpp::query_selector_all(root, "p");
+    auto ps_result = lexborpp::query_selector_all(root, "p");
+    REQUIRE(ps_result.has_value());
+    auto ps = ps_result.value();
     REQUIRE(ps.size() == 2);
     REQUIRE(lexborpp::get_deep_text(ps[0]) == "First");
     REQUIRE(lexborpp::get_deep_text(ps[1]) == "Second");
 
-    REQUIRE(lexborpp::query_selector_all(root, "h1").empty());
+    auto h1_result = lexborpp::query_selector_all(root, "h1");
+    REQUIRE(h1_result.has_value());
+    REQUIRE(h1_result.value().empty());
 
-    auto* content = lexborpp::query_selector(root, "#content");
+    auto content_result = lexborpp::query_selector(root, "#content");
+    REQUIRE(content_result.has_value());
+    auto* content = content_result.value();
     REQUIRE(content != nullptr);
-    auto self = lexborpp::query_selector_all(content, "div#content");
+    auto self_result = lexborpp::query_selector_all(content, "div#content");
+    REQUIRE(self_result.has_value());
+    auto self = self_result.value();
     REQUIRE(self.size() == 1);
     REQUIRE(self[0] == content);
   }
@@ -231,7 +250,9 @@ TEST_CASE("lexborpp CSS selector and manipulation functions") {
       "section#tree strong#leaf-b, section#tree > article#branch-a, article#branch-a ~ article#branch-b, section#tree > article#branch-b strong#leaf-b">(tree_root);
     REQUIRE(collect_ids(shaped) == std::vector<std::string>{"branch-a", "branch-b", "leaf-b"});
 
-    auto* content = lexborpp::query_selector(root, "#content");
+    auto content_result = lexborpp::query_selector(root, "#content");
+    REQUIRE(content_result.has_value());
+    auto* content = content_result.value();
     REQUIRE(content != nullptr);
     auto self = lexborpp::query_selector_all<"div#content">(content);
     REQUIRE(self.size() == 1);
@@ -239,7 +260,9 @@ TEST_CASE("lexborpp CSS selector and manipulation functions") {
   }
 
   SECTION("DOM manipulation (attributes)") {
-    auto* content = lexborpp::query_selector(root, "#content");
+    auto content_result = lexborpp::query_selector(root, "#content");
+    REQUIRE(content_result.has_value());
+    auto* content = content_result.value();
     auto* element = lexborpp::as_element(content);
 
     REQUIRE(lexborpp::set_attr(element, "data-test", "value"));
@@ -255,7 +278,9 @@ TEST_CASE("lexborpp CSS selector and manipulation functions") {
   }
 
   SECTION("DOM manipulation (text content)") {
-    auto* p = lexborpp::query_selector(root, "p.target");
+    auto p_result = lexborpp::query_selector(root, "p.target");
+    REQUIRE(p_result.has_value());
+    auto* p = p_result.value();
     REQUIRE(lexborpp::set_text_content(p, "New Text"));
     REQUIRE(lexborpp::get_deep_text(p) == "New Text");
 
@@ -264,11 +289,15 @@ TEST_CASE("lexborpp CSS selector and manipulation functions") {
   }
 
   SECTION("Serialization") {
-    auto* bold = lexborpp::query_selector(root, "b");
+    auto bold_result = lexborpp::query_selector(root, "b");
+    REQUIRE(bold_result.has_value());
+    auto* bold = bold_result.value();
     REQUIRE(lexborpp::outer_html(bold) == "<b>Bold</b>");
     REQUIRE(lexborpp::inner_html(bold) == "Bold");
 
-    auto* content = lexborpp::query_selector(root, "#content");
+    auto content_result = lexborpp::query_selector(root, "#content");
+    REQUIRE(content_result.has_value());
+    auto* content = content_result.value();
     REQUIRE(lexborpp::set_attr(lexborpp::as_element(content), "title", "hello"));
     auto const html_str = lexborpp::outer_html(content);
     REQUIRE(html_str.find("title=\"hello\"") != std::string::npos);
@@ -280,96 +309,127 @@ TEST_CASE("runtime CSS selectors match all combinator types") {
   auto* root = fixture.document_node();
 
   SECTION("type selector") {
-    auto* node = lexborpp::query_selector(root, "article");
+    auto result = lexborpp::query_selector(root, "article");
+    REQUIRE(result.has_value());
+    auto* node = result.value();
     REQUIRE(node != nullptr);
     REQUIRE(lexborpp::get_attr_value(node, "id") == "branch-a");
   }
 
   SECTION("universal selector") {
-    auto all = lexborpp::query_selector_all(root, "*");
-    REQUIRE(all.size() > 0);
+    auto result = lexborpp::query_selector_all(root, "*");
+    REQUIRE(result.has_value());
+    REQUIRE(result.value().size() > 0);
   }
 
   SECTION("id selector") {
-    auto* node = lexborpp::query_selector(root, "#leaf-b");
+    auto result = lexborpp::query_selector(root, "#leaf-b");
+    REQUIRE(result.has_value());
+    auto* node = result.value();
     REQUIRE(node != nullptr);
     REQUIRE(lexborpp::get_attr_value(node, "id") == "leaf-b");
   }
 
   SECTION("class selector") {
-    auto* node = lexborpp::query_selector(root, ".alpha");
+    auto result = lexborpp::query_selector(root, ".alpha");
+    REQUIRE(result.has_value());
+    auto* node = result.value();
     REQUIRE(node != nullptr);
     REQUIRE(lexborpp::get_attr_value(node, "id") == "container");
   }
 
   SECTION("attribute selector equals") {
-    auto* node = lexborpp::query_selector(root, "[data-role=main]");
+    auto result = lexborpp::query_selector(root, "[data-role=main]");
+    REQUIRE(result.has_value());
+    auto* node = result.value();
     REQUIRE(node != nullptr);
     REQUIRE(lexborpp::get_attr_value(node, "id") == "container");
   }
 
   SECTION("attribute selector exists") {
-    auto* node = lexborpp::query_selector(root, "[data-role]");
-    REQUIRE(node != nullptr);
+    auto result = lexborpp::query_selector(root, "[data-role]");
+    REQUIRE(result.has_value());
+    REQUIRE(result.value() != nullptr);
   }
 
   SECTION("compound selector") {
-    auto* node = lexborpp::query_selector(root, "div[data-role=main]");
+    auto result = lexborpp::query_selector(root, "div[data-role=main]");
+    REQUIRE(result.has_value());
+    auto* node = result.value();
     REQUIRE(node != nullptr);
     REQUIRE(lexborpp::get_attr_value(node, "id") == "container");
   }
 
   SECTION("child combinator") {
-    auto* node = lexborpp::query_selector(root, "section > article");
+    auto result = lexborpp::query_selector(root, "section > article");
+    REQUIRE(result.has_value());
+    auto* node = result.value();
     REQUIRE(node != nullptr);
     REQUIRE(lexborpp::get_attr_value(node, "id") == "branch-a");
   }
 
   SECTION("descendant combinator") {
-    auto* node = lexborpp::query_selector(root, "section strong");
+    auto result = lexborpp::query_selector(root, "section strong");
+    REQUIRE(result.has_value());
+    auto* node = result.value();
     REQUIRE(node != nullptr);
     REQUIRE(lexborpp::get_attr_value(node, "id") == "leaf-b");
   }
 
   SECTION("adjacent sibling combinator") {
-    auto* tree = lexborpp::query_selector(root, "#tree");
-    auto* node = lexborpp::query_selector(tree, "article + article");
+    auto tree_result = lexborpp::query_selector(root, "#tree");
+    REQUIRE(tree_result.has_value());
+    auto* tree = tree_result.value();
+    auto result = lexborpp::query_selector(tree, "article + article");
+    REQUIRE(result.has_value());
+    auto* node = result.value();
     REQUIRE(node != nullptr);
     REQUIRE(lexborpp::get_attr_value(node, "id") == "branch-b");
   }
 
   SECTION("following sibling combinator") {
-    auto* tree = lexborpp::query_selector(root, "#tree");
-    auto* node = lexborpp::query_selector(tree, "#branch-a ~ article");
+    auto tree_result = lexborpp::query_selector(root, "#tree");
+    REQUIRE(tree_result.has_value());
+    auto* tree = tree_result.value();
+    auto result = lexborpp::query_selector(tree, "#branch-a ~ article");
+    REQUIRE(result.has_value());
+    auto* node = result.value();
     REQUIRE(node != nullptr);
     REQUIRE(lexborpp::get_attr_value(node, "id") == "branch-b");
   }
 
   SECTION("comma group") {
-    auto results = lexborpp::query_selector_all(root, "em, strong");
-    REQUIRE(results.size() == 2);
+    auto result = lexborpp::query_selector_all(root, "em, strong");
+    REQUIRE(result.has_value());
+    REQUIRE(result.value().size() == 2);
   }
 
   SECTION("complex mixed selector") {
-    auto* node = lexborpp::query_selector(root, "section > article#branch-b strong");
+    auto result = lexborpp::query_selector(root, "section > article#branch-b strong");
+    REQUIRE(result.has_value());
+    auto* node = result.value();
     REQUIRE(node != nullptr);
     REQUIRE(lexborpp::get_attr_value(node, "id") == "leaf-b");
   }
 
-  SECTION("empty selector returns nullptr") {
-    REQUIRE(lexborpp::query_selector(root, "") == nullptr);
+  SECTION("empty selector returns unexpected") {
+    REQUIRE_FALSE(lexborpp::query_selector(root, "").has_value());
   }
 
-  SECTION("nullptr node returns nullptr") {
-    REQUIRE(lexborpp::query_selector(nullptr, "div") == nullptr);
+  SECTION("nullptr node returns unexpected") {
+    REQUIRE_FALSE(lexborpp::query_selector(nullptr, "div").has_value());
   }
 
-  SECTION("non-matching selector returns nullptr") {
-    REQUIRE(lexborpp::query_selector(root, "h1") == nullptr);
+  SECTION("non-matching selector returns nullptr in expected") {
+    auto result = lexborpp::query_selector(root, "h1");
+    REQUIRE(result.has_value());
+    REQUIRE(result.value() == nullptr);
   }
 
   SECTION("self-matching includes root") {
-    auto* node = lexborpp::query_selector(root, "body");
+    auto result = lexborpp::query_selector(root, "body");
+    REQUIRE(result.has_value());
+    auto* node = result.value();
     REQUIRE(node != nullptr);
     REQUIRE(lexborpp::get_attr_value(node, "id") == "body");
   }
@@ -395,7 +455,9 @@ TEST_CASE("node_prev_sibling_walker traverses backwards") {
   auto doc_expected = lexborpp::parse_html(html);
   auto* root = lexborpp::get_root(doc_expected.value());
 
-  auto* c = lexborpp::query_selector(root, "#c");
+  auto c_result = lexborpp::query_selector(root, "#c");
+  REQUIRE(c_result.has_value());
+  auto* c = c_result.value();
   REQUIRE(c != nullptr);
 
   auto walker = lexborpp::node_prev_sibling_walker{c};
@@ -409,7 +471,9 @@ TEST_CASE("node_prev_sibling_walker traverses backwards") {
   REQUIRE(ids == std::vector<std::string>{"b", "a"});
   REQUIRE(std::ranges::distance(walker) == 2);
 
-  auto* a = lexborpp::query_selector(root, "#a");
+  auto a_result = lexborpp::query_selector(root, "#a");
+  REQUIRE(a_result.has_value());
+  auto* a = a_result.value();
   REQUIRE(std::ranges::distance(lexborpp::node_prev_sibling_walker{a}) == 0);
 
   // Filter test
@@ -814,36 +878,44 @@ TEST_CASE("attribute selector match types work correctly") {
   auto* root = fixture.document_node();
 
   SECTION("attribute equals (=)") {
-    auto* node = lexborpp::query_selector(root, "[data-val=exact]");
+    auto result = lexborpp::query_selector(root, "[data-val=exact]");
+    REQUIRE(result.has_value());
+    auto* node = result.value();
     REQUIRE(node != nullptr);
     REQUIRE(lexborpp::get_attr_value(node, "id") == "equals");
 
     // NTTP version
-    node = lexborpp::query_selector<"[data-val=exact]">(root);
-    REQUIRE(node != nullptr);
-    REQUIRE(lexborpp::get_attr_value(node, "id") == "equals");
+    auto node_nttp = lexborpp::query_selector<"[data-val=exact]">(root);
+    REQUIRE(node_nttp != nullptr);
+    REQUIRE(lexborpp::get_attr_value(node_nttp, "id") == "equals");
   }
 
   SECTION("attribute includes (~=)") {
     // "main item" should match "main" via whitespace token
-    auto* node = lexborpp::query_selector(root, "[title~=main]");
+    auto result = lexborpp::query_selector(root, "[title~=main]");
+    REQUIRE(result.has_value());
+    auto* node = result.value();
     REQUIRE(node != nullptr);
     REQUIRE(lexborpp::get_attr_value(node, "id") == "title-main");
 
-    node = lexborpp::query_selector<"[title~=main]">(root);
-    REQUIRE(node != nullptr);
-    REQUIRE(lexborpp::get_attr_value(node, "id") == "title-main");
+    auto node_nttp = lexborpp::query_selector<"[title~=main]">(root);
+    REQUIRE(node_nttp != nullptr);
+    REQUIRE(lexborpp::get_attr_value(node_nttp, "id") == "title-main");
 
     // "main item" should also match "item"
-    node = lexborpp::query_selector(root, "[title~=item]");
-    REQUIRE(node != nullptr);
-    REQUIRE(lexborpp::get_attr_value(node, "id") == "title-main");
+    auto result2 = lexborpp::query_selector(root, "[title~=item]");
+    REQUIRE(result2.has_value());
+    auto* node2 = result2.value();
+    REQUIRE(node2 != nullptr);
+    REQUIRE(lexborpp::get_attr_value(node2, "id") == "title-main");
   }
 
   SECTION("attribute dash-prefix (|=)") {
     // "en" matches both "lang-en" (id=lang-en, lang=en) and "dash-match" (id=dash-match, lang=en)
     // via exact match, plus "lang-en-us" (lang=en-US) via dash-prefix.
-    auto results = lexborpp::query_selector_all(root, "[lang|=en]");
+    auto result = lexborpp::query_selector_all(root, "[lang|=en]");
+    REQUIRE(result.has_value());
+    auto results = result.value();
     REQUIRE(results.size() == 3);
 
     // First match in DOM order is "lang-en"
@@ -854,58 +926,70 @@ TEST_CASE("attribute selector match types work correctly") {
   }
 
   SECTION("attribute prefix (^=)") {
-    auto* node = lexborpp::query_selector(root, "[href^=https]");
+    auto result = lexborpp::query_selector(root, "[href^=https]");
+    REQUIRE(result.has_value());
+    auto* node = result.value();
     REQUIRE(node != nullptr);
     REQUIRE(lexborpp::get_attr_value(node, "id") == "href-prefix");
 
-    node = lexborpp::query_selector<"[href^=https]">(root);
-    REQUIRE(node != nullptr);
-    REQUIRE(lexborpp::get_attr_value(node, "id") == "href-prefix");
+    auto node_nttp = lexborpp::query_selector<"[href^=https]">(root);
+    REQUIRE(node_nttp != nullptr);
+    REQUIRE(lexborpp::get_attr_value(node_nttp, "id") == "href-prefix");
   }
 
   SECTION("attribute suffix ($=)") {
-    auto* node = lexborpp::query_selector(root, "[src$=\".png\"]");
+    auto result = lexborpp::query_selector(root, "[src$=\".png\"]");
+    REQUIRE(result.has_value());
+    auto* node = result.value();
     REQUIRE(node != nullptr);
     REQUIRE(lexborpp::get_attr_value(node, "id") == "src-suffix");
 
-    node = lexborpp::query_selector<"[src$=\".png\"]">(root);
-    REQUIRE(node != nullptr);
-    REQUIRE(lexborpp::get_attr_value(node, "id") == "src-suffix");
+    auto node_nttp = lexborpp::query_selector<"[src$=\".png\"]">(root);
+    REQUIRE(node_nttp != nullptr);
+    REQUIRE(lexborpp::get_attr_value(node_nttp, "id") == "src-suffix");
   }
 
   SECTION("attribute substring (*=)") {
-    auto* node = lexborpp::query_selector(root, "[data-text*=world]");
+    auto result = lexborpp::query_selector(root, "[data-text*=world]");
+    REQUIRE(result.has_value());
+    auto* node = result.value();
     REQUIRE(node != nullptr);
     REQUIRE(lexborpp::get_attr_value(node, "id") == "text-contains");
 
-    node = lexborpp::query_selector<"[data-text*=world]">(root);
-    REQUIRE(node != nullptr);
-    REQUIRE(lexborpp::get_attr_value(node, "id") == "text-contains");
+    auto node_nttp = lexborpp::query_selector<"[data-text*=world]">(root);
+    REQUIRE(node_nttp != nullptr);
+    REQUIRE(lexborpp::get_attr_value(node_nttp, "id") == "text-contains");
   }
 
   SECTION("attribute exists (no operator)") {
-    auto* node = lexborpp::query_selector(root, "[custom-attr]");
+    auto result = lexborpp::query_selector(root, "[custom-attr]");
+    REQUIRE(result.has_value());
+    auto* node = result.value();
     REQUIRE(node != nullptr);
     REQUIRE(lexborpp::get_attr_value(node, "id") == "exists-only");
 
-    node = lexborpp::query_selector<"[custom-attr]">(root);
-    REQUIRE(node != nullptr);
-    REQUIRE(lexborpp::get_attr_value(node, "id") == "exists-only");
+    auto node_nttp = lexborpp::query_selector<"[custom-attr]">(root);
+    REQUIRE(node_nttp != nullptr);
+    REQUIRE(lexborpp::get_attr_value(node_nttp, "id") == "exists-only");
   }
 
   SECTION("quoted attribute value with space") {
-    auto* node = lexborpp::query_selector(root, "[data-text=\"hello world\"]");
+    auto result = lexborpp::query_selector(root, "[data-text=\"hello world\"]");
+    REQUIRE(result.has_value());
+    auto* node = result.value();
     REQUIRE(node != nullptr);
     REQUIRE(lexborpp::get_attr_value(node, "id") == "text-contains");
 
-    node = lexborpp::query_selector<"[data-text=\"hello world\"]">(root);
-    REQUIRE(node != nullptr);
-    REQUIRE(lexborpp::get_attr_value(node, "id") == "text-contains");
+    auto node_nttp = lexborpp::query_selector<"[data-text=\"hello world\"]">(root);
+    REQUIRE(node_nttp != nullptr);
+    REQUIRE(lexborpp::get_attr_value(node_nttp, "id") == "text-contains");
 
     // Single-quoted version
-    node = lexborpp::query_selector(root, "[data-text='hello world']");
-    REQUIRE(node != nullptr);
-    REQUIRE(lexborpp::get_attr_value(node, "id") == "text-contains");
+    auto result2 = lexborpp::query_selector(root, "[data-text='hello world']");
+    REQUIRE(result2.has_value());
+    auto* node2 = result2.value();
+    REQUIRE(node2 != nullptr);
+    REQUIRE(lexborpp::get_attr_value(node2, "id") == "text-contains");
   }
 }
 
@@ -914,41 +998,43 @@ TEST_CASE("runtime CSS parser rejects invalid selectors gracefully") {
   auto fixture = html_document_fixture{html};
   auto* root = fixture.document_node();
 
-  SECTION("pseudo-class returns nullptr/empty") {
-    REQUIRE(lexborpp::query_selector(root, "div:not(.foo)") == nullptr);
-    REQUIRE(lexborpp::query_selector_all(root, "div:not(.foo)").empty());
+  SECTION("pseudo-class returns unexpected") {
+    REQUIRE_FALSE(lexborpp::query_selector(root, "div:not(.foo)").has_value());
+    REQUIRE_FALSE(lexborpp::query_selector_all(root, "div:not(.foo)").has_value());
 
-    REQUIRE(lexborpp::query_selector(root, ":first-child") == nullptr);
-    REQUIRE(lexborpp::query_selector_all(root, ":first-child").empty());
+    REQUIRE_FALSE(lexborpp::query_selector(root, ":first-child").has_value());
+    REQUIRE_FALSE(lexborpp::query_selector_all(root, ":first-child").has_value());
   }
 
   SECTION("pseudo-class with parentheses") {
-    REQUIRE(lexborpp::query_selector(root, "div:nth-child(2)") == nullptr);
-    REQUIRE(lexborpp::query_selector_all(root, "div:nth-child(2)").empty());
+    REQUIRE_FALSE(lexborpp::query_selector(root, "div:nth-child(2)").has_value());
+    REQUIRE_FALSE(lexborpp::query_selector_all(root, "div:nth-child(2)").has_value());
   }
 
   SECTION("malformed attribute selector") {
-    REQUIRE(lexborpp::query_selector(root, "[id") == nullptr);
-    REQUIRE(lexborpp::query_selector_all(root, "[id").empty());
+    REQUIRE_FALSE(lexborpp::query_selector(root, "[id").has_value());
+    REQUIRE_FALSE(lexborpp::query_selector_all(root, "[id").has_value());
   }
 
   SECTION("empty id selector") {
-    REQUIRE(lexborpp::query_selector(root, "div#") == nullptr);
-    REQUIRE(lexborpp::query_selector_all(root, "div#").empty());
+    REQUIRE_FALSE(lexborpp::query_selector(root, "div#").has_value());
+    REQUIRE_FALSE(lexborpp::query_selector_all(root, "div#").has_value());
   }
 
   SECTION("empty class selector") {
-    REQUIRE(lexborpp::query_selector(root, "div.") == nullptr);
-    REQUIRE(lexborpp::query_selector_all(root, "div.").empty());
+    REQUIRE_FALSE(lexborpp::query_selector(root, "div.").has_value());
+    REQUIRE_FALSE(lexborpp::query_selector_all(root, "div.").has_value());
   }
 
   SECTION("selector with unsupported operator after equals") {
-    REQUIRE(lexborpp::query_selector(root, "[id!=x]") == nullptr);
-    REQUIRE(lexborpp::query_selector_all(root, "[id!=x]").empty());
+    REQUIRE_FALSE(lexborpp::query_selector(root, "[id!=x]").has_value());
+    REQUIRE_FALSE(lexborpp::query_selector_all(root, "[id!=x]").has_value());
   }
 
   SECTION("valid selectors should still work") {
-    auto* node = lexborpp::query_selector(root, "div#a span");
+    auto result = lexborpp::query_selector(root, "div#a span");
+    REQUIRE(result.has_value());
+    auto* node = result.value();
     REQUIRE(node != nullptr);
   }
 }
@@ -966,22 +1052,36 @@ TEST_CASE("indexed queries respect the search scope") {
   auto* root = fixture.document_node();
   auto index = lexborpp::document_id_index{root};
 
-  auto* subtree = lexborpp::query_selector(root, "#outer");
+  auto subtree_result = lexborpp::query_selector(root, "#outer");
+  REQUIRE(subtree_result.has_value());
+  auto* subtree = subtree_result.value();
   REQUIRE(subtree != nullptr);
 
   SECTION("runtime query_selector does not leak outside the subtree") {
-    REQUIRE(lexborpp::query_selector(subtree, "#else") == nullptr);
-    REQUIRE(lexborpp::query_selector(subtree, "#else", index) == nullptr);
+    // サブツリー外のノードは見つからない（expected に nullptr が入る）
+    auto not_found = lexborpp::query_selector(subtree, "#else");
+    REQUIRE(not_found.has_value());
+    REQUIRE(not_found.value() == nullptr);
 
-    auto* inner = lexborpp::query_selector(subtree, "#inner", index);
+    auto not_found_indexed = lexborpp::query_selector(subtree, "#else", index);
+    REQUIRE(not_found_indexed.has_value());
+    REQUIRE(not_found_indexed.value() == nullptr);
+
+    auto inner_result = lexborpp::query_selector(subtree, "#inner", index);
+    REQUIRE(inner_result.has_value());
+    auto* inner = inner_result.value();
     REQUIRE(inner != nullptr);
     REQUIRE(lexborpp::get_attr_value(inner, "id") == "inner");
   }
 
   SECTION("runtime query_selector_all does not leak outside the subtree") {
-    REQUIRE(lexborpp::query_selector_all(subtree, "#else", index).empty());
+    auto empty_result = lexborpp::query_selector_all(subtree, "#else", index);
+    REQUIRE(empty_result.has_value());
+    REQUIRE(empty_result.value().empty());
 
-    auto results = lexborpp::query_selector_all(subtree, "#inner", index);
+    auto results_result = lexborpp::query_selector_all(subtree, "#inner", index);
+    REQUIRE(results_result.has_value());
+    auto results = results_result.value();
     REQUIRE(results.size() == 1);
     REQUIRE(lexborpp::get_attr_value(results[0], "id") == "inner");
   }
@@ -1006,14 +1106,18 @@ TEST_CASE("indexed queries respect the search scope") {
   SECTION("descendant id outside subtree is not matched via ancestor chain") {
     // サブツリー内のノードを右端 id で検索するケース。インデックスは
     // 全体で構築されているのでスコープチェックが機能していることの確認。
-    auto* nested = lexborpp::query_selector(root, "#inner");
+    auto nested_result = lexborpp::query_selector(root, "#inner");
+    REQUIRE(nested_result.has_value());
+    auto* nested = nested_result.value();
     REQUIRE(nested != nullptr);
 
-    auto* via_index = lexborpp::query_selector(root, "div#outer #inner", index);
-    REQUIRE(via_index == nested);
+    auto via_index_result = lexborpp::query_selector(root, "div#outer #inner", index);
+    REQUIRE(via_index_result.has_value());
+    REQUIRE(via_index_result.value() == nested);
 
-    auto* via_subtree_index = lexborpp::query_selector(subtree, "#inner", index);
-    REQUIRE(via_subtree_index == nested);
+    auto via_subtree_index_result = lexborpp::query_selector(subtree, "#inner", index);
+    REQUIRE(via_subtree_index_result.has_value());
+    REQUIRE(via_subtree_index_result.value() == nested);
   }
 }
 
@@ -1021,7 +1125,9 @@ TEST_CASE("set_text_content destroys nested descendants") {
   auto const html = R"HTML(<div id="a">old <b>nested <i>deep</i></b> tail</div>)HTML";
   auto fixture = html_document_fixture{html};
   auto* root = fixture.document_node();
-  auto* node = lexborpp::query_selector(root, "#a");
+  auto node_result = lexborpp::query_selector(root, "#a");
+  REQUIRE(node_result.has_value());
+  auto* node = node_result.value();
   REQUIRE(node != nullptr);
 
   REQUIRE(lexborpp::set_text_content(node, "NEW"));
@@ -1039,14 +1145,16 @@ TEST_CASE("empty quoted attribute values are valid selectors") {
   auto* root = fixture.document_node();
 
   SECTION("runtime parser accepts [attr=\"\"]") {
-    auto* node = lexborpp::query_selector(root, "[custom-attr=\"\"]");
+    auto result = lexborpp::query_selector(root, "[custom-attr=\"\"]");
+    REQUIRE(result.has_value());
+    auto* node = result.value();
     REQUIRE(node != nullptr);
     REQUIRE(lexborpp::get_attr_value(node, "id") == "empty");
   }
 
   SECTION("runtime parser rejects [attr=] without quotes") {
-    REQUIRE(lexborpp::query_selector(root, "[custom-attr=]") == nullptr);
-    REQUIRE(lexborpp::query_selector_all(root, "[custom-attr=]").empty());
+    REQUIRE_FALSE(lexborpp::query_selector(root, "[custom-attr=]").has_value());
+    REQUIRE_FALSE(lexborpp::query_selector_all(root, "[custom-attr=]").has_value());
   }
 
   SECTION("NTTP parser accepts [attr=\"\"]") {
@@ -1056,7 +1164,9 @@ TEST_CASE("empty quoted attribute values are valid selectors") {
   }
 
   SECTION("quoted value with space") {
-    auto* node = lexborpp::query_selector(root, "[custom-attr=\" \"]");
+    auto result = lexborpp::query_selector(root, "[custom-attr=\" \"]");
+    REQUIRE(result.has_value());
+    auto* node = result.value();
     REQUIRE(node != nullptr);
     REQUIRE(lexborpp::get_attr_value(node, "id") == "spaced");
   }
@@ -1163,47 +1273,55 @@ TEST_CASE("document_id_index with runtime query_selector") {
   auto index = lexborpp::document_id_index{root};
 
   SECTION("single id selector") {
-    auto* node = lexborpp::query_selector(root, "#leaf-b", index);
+    auto result = lexborpp::query_selector(root, "#leaf-b", index);
+    REQUIRE(result.has_value());
+    auto* node = result.value();
     REQUIRE(node != nullptr);
     REQUIRE(lexborpp::get_attr_value(node, "id") == "leaf-b");
   }
 
   SECTION("complex selector with id") {
-    auto* node = lexborpp::query_selector(root, "section#tree strong#leaf-b", index);
+    auto result = lexborpp::query_selector(root, "section#tree strong#leaf-b", index);
+    REQUIRE(result.has_value());
+    auto* node = result.value();
     REQUIRE(node != nullptr);
     REQUIRE(lexborpp::get_attr_value(node, "id") == "leaf-b");
   }
 
-  SECTION("non-matching id returns nullptr") {
-    auto* node = lexborpp::query_selector(root, "#non-existent", index);
-    REQUIRE(node == nullptr);
+  SECTION("non-matching id returns nullptr in expected") {
+    auto result = lexborpp::query_selector(root, "#non-existent", index);
+    REQUIRE(result.has_value());
+    REQUIRE(result.value() == nullptr);
   }
 
-  SECTION("empty selector returns nullptr") {
-    auto* node = lexborpp::query_selector(root, "", index);
-    REQUIRE(node == nullptr);
+  SECTION("empty selector returns unexpected") {
+    REQUIRE_FALSE(lexborpp::query_selector(root, "", index).has_value());
   }
 
-  SECTION("nullptr node returns nullptr") {
-    auto* node = lexborpp::query_selector(nullptr, "#leaf-b", index);
-    REQUIRE(node == nullptr);
+  SECTION("nullptr node returns unexpected") {
+    REQUIRE_FALSE(lexborpp::query_selector(nullptr, "#leaf-b", index).has_value());
   }
 
   SECTION("query_selector_all with single id") {
-    auto results = lexborpp::query_selector_all(root, "#leaf-b", index);
+    auto result = lexborpp::query_selector_all(root, "#leaf-b", index);
+    REQUIRE(result.has_value());
+    auto results = result.value();
     REQUIRE(results.size() == 1);
     REQUIRE(lexborpp::get_attr_value(results[0], "id") == "leaf-b");
   }
 
   SECTION("query_selector_all with complex selector") {
-    auto results = lexborpp::query_selector_all(root, "p", index);
-    REQUIRE(results.size() >= 2);
+    auto result = lexborpp::query_selector_all(root, "p", index);
+    REQUIRE(result.has_value());
+    REQUIRE(result.value().size() >= 2);
   }
 
   SECTION("results match between indexed and non-indexed queries") {
-    auto* with_index = lexborpp::query_selector(root, "section#tree strong#leaf-b", index);
-    auto* without = lexborpp::query_selector(root, "section#tree strong#leaf-b");
-    REQUIRE(with_index == without);
+    auto with_index_result = lexborpp::query_selector(root, "section#tree strong#leaf-b", index);
+    auto without_result = lexborpp::query_selector(root, "section#tree strong#leaf-b");
+    REQUIRE(with_index_result.has_value());
+    REQUIRE(without_result.has_value());
+    REQUIRE(with_index_result.value() == without_result.value());
   }
 }
 
@@ -1214,15 +1332,18 @@ TEST_CASE("document_id_index registers only the first duplicate id") {
 
   auto index = lexborpp::document_id_index{root};
   // 重複 id は最初に見つかった (DFS 順) ノードのみ登録する。
-  auto* first_dup = lexborpp::query_selector(root, "p");
+  auto first_dup_result = lexborpp::query_selector(root, "p");
+  REQUIRE(first_dup_result.has_value());
+  auto* first_dup = first_dup_result.value();
   REQUIRE(first_dup != nullptr);
   REQUIRE(index.size() == 2);
   REQUIRE(index.find("dup") == first_dup);
   REQUIRE(lexborpp::get_attr_value(index.find("dup"), "id") == "dup");
 
   SECTION("indexed query also resolves to the first node") {
-    auto* node = lexborpp::query_selector(root, "#dup", index);
-    REQUIRE(node == first_dup);
+    auto node_result = lexborpp::query_selector(root, "#dup", index);
+    REQUIRE(node_result.has_value());
+    REQUIRE(node_result.value() == first_dup);
   }
 
   SECTION("rebuild keeps first-wins semantics") {
@@ -1251,8 +1372,9 @@ TEST_CASE("document_id_index goes stale after DOM edits until rebuild") {
     REQUIRE(index.find("target") == nullptr);
     REQUIRE(index.find("renamed") == target);
 
-    auto* found = lexborpp::query_selector(root, "#renamed", index);
-    REQUIRE(found == target);
+    auto found_result = lexborpp::query_selector(root, "#renamed", index);
+    REQUIRE(found_result.has_value());
+    REQUIRE(found_result.value() == target);
   }
 }
 

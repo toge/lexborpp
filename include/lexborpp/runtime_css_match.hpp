@@ -1,7 +1,9 @@
 #ifndef LEXBORPP_RUNTIME_CSS_MATCH_HPP_
 #define LEXBORPP_RUNTIME_CSS_MATCH_HPP_
 
+#include <expected>
 #include <string_view>
+#include <system_error>
 #include <vector>
 
 #include "lexbor/dom/dom.h"
@@ -113,7 +115,7 @@ template <std::size_t Max>
 template <std::size_t Max>
 [[nodiscard]] inline auto query_selector_spec_first(
   lxb_dom_node_t* node,
-  selector_spec<Max> const& spec) -> lxb_dom_node_t* {
+  selector_spec<Max> const& spec) noexcept -> lxb_dom_node_t* {
   if (node == nullptr) return nullptr;
   for (auto* cur : node_walker{node}) {
     if (is_non_element_node(cur)) continue;
@@ -125,7 +127,7 @@ template <std::size_t Max>
 template <std::size_t Max>
 [[nodiscard]] inline auto query_selector_spec_all(
   lxb_dom_node_t* node,
-  selector_spec<Max> const& spec) -> std::vector<lxb_dom_node_t*> {
+  selector_spec<Max> const& spec) noexcept -> std::vector<lxb_dom_node_t*> {
   auto result = std::vector<lxb_dom_node_t*>{};
   if (node == nullptr) return result;
   result.reserve(16);
@@ -136,21 +138,23 @@ template <std::size_t Max>
   return result;
 }
 
-// Public API: query_selector (runtime)
+// Public API: query_selector (runtime) - returns std::expected
 [[nodiscard]] inline auto query_selector_runtime(
   lxb_dom_node_t* node,
-  std::string_view selector) -> lxb_dom_node_t* {
-  if (node == nullptr || selector.empty()) return nullptr;
+  std::string_view selector) noexcept -> std::expected<lxb_dom_node_t*, std::errc> {
+  if (node == nullptr || selector.empty()) return std::unexpected(std::errc::invalid_argument);
   auto spec = parse_runtime_selector_auto(selector);
-  return query_selector_spec_first(node, spec);
+  if (!spec) return std::unexpected(spec.error());
+  return query_selector_spec_first(node, *spec);
 }
 
 [[nodiscard]] inline auto query_selector_all_runtime(
   lxb_dom_node_t* node,
-  std::string_view selector) -> std::vector<lxb_dom_node_t*> {
-  if (node == nullptr || selector.empty()) return {};
+  std::string_view selector) noexcept -> std::expected<std::vector<lxb_dom_node_t*>, std::errc> {
+  if (node == nullptr || selector.empty()) return std::unexpected(std::errc::invalid_argument);
   auto spec = parse_runtime_selector_auto(selector);
-  return query_selector_spec_all(node, spec);
+  if (!spec) return std::unexpected(spec.error());
+  return query_selector_spec_all(node, *spec);
 }
 
 // --- Runtime id prefilter helpers (expanded) ---
@@ -164,7 +168,7 @@ struct runtime_id_prefilter {
 
 template <std::size_t Max>
 [[nodiscard]] inline auto runtime_get_id_prefilter(
-  selector_spec<Max> const& spec) -> runtime_id_prefilter {
+  selector_spec<Max> const& spec) noexcept -> runtime_id_prefilter {
   if (spec.group_count != 1) return {};
   auto const& g = spec.groups[0];
   // search from rightmost compound to leftmost for id
@@ -185,72 +189,74 @@ template <std::size_t Max>
 [[nodiscard]] inline auto query_selector_runtime(
   lxb_dom_node_t* node,
   std::string_view selector,
-  document_id_index const& index) -> lxb_dom_node_t* {
-  if (node == nullptr || selector.empty()) return nullptr;
+  document_id_index const& index) noexcept -> std::expected<lxb_dom_node_t*, std::errc> {
+  if (node == nullptr || selector.empty()) return std::unexpected(std::errc::invalid_argument);
   auto spec = parse_runtime_selector_auto(selector);
-  if (spec.group_count == 0) return nullptr;
-  auto const pf = runtime_get_id_prefilter(spec);
+  if (!spec) return std::unexpected(spec.error());
+  if (spec->group_count == 0) return std::unexpected(std::errc::invalid_argument);
+  auto const pf = runtime_get_id_prefilter(*spec);
   if (pf.found) {
     auto* found = index.find(pf.value);
     if (found == nullptr || !is_descendant_of(found, node)) return nullptr;
     if (pf.is_last) {
-      if (match_runtime_selector(found, spec)) return found;
+      if (match_runtime_selector(found, *spec)) return found;
       return nullptr;
     } else {
       // id is not in rightmost compound: limit search to subtree of found
-      return query_selector_spec_first(found, spec);
+      return query_selector_spec_first(found, *spec);
     }
   }
-  return query_selector_spec_first(node, spec);
+  return query_selector_spec_first(node, *spec);
 }
 
 [[nodiscard]] inline auto query_selector_all_runtime(
   lxb_dom_node_t* node,
   std::string_view selector,
-  document_id_index const& index) -> std::vector<lxb_dom_node_t*> {
-  if (node == nullptr || selector.empty()) return {};
+  document_id_index const& index) noexcept -> std::expected<std::vector<lxb_dom_node_t*>, std::errc> {
+  if (node == nullptr || selector.empty()) return std::unexpected(std::errc::invalid_argument);
   auto spec = parse_runtime_selector_auto(selector);
-  if (spec.group_count == 0) return {};
-  auto const pf = runtime_get_id_prefilter(spec);
+  if (!spec) return std::unexpected(spec.error());
+  if (spec->group_count == 0) return std::unexpected(std::errc::invalid_argument);
+  auto const pf = runtime_get_id_prefilter(*spec);
   if (pf.found) {
     auto* found = index.find(pf.value);
-    if (found == nullptr || !is_descendant_of(found, node)) return {};
-    if (pf.is_last && spec.groups[0].compound_count == 1) {
-      if (match_runtime_selector(found, spec)) return {found};
-      return {};
+    if (found == nullptr || !is_descendant_of(found, node)) return std::vector<lxb_dom_node_t*>{};
+    if (pf.is_last && spec->groups[0].compound_count == 1) {
+      if (match_runtime_selector(found, *spec)) return std::vector<lxb_dom_node_t*>{found};
+      return std::vector<lxb_dom_node_t*>{};
     }
     if (pf.is_last) {
       // last compound has id but group has multiple compounds: still single-node check suffices
       // because rightmost compound is the id; if that node matches whole chain, it's unique.
-      if (match_runtime_selector(found, spec)) return {found};
-      return {};
+      if (match_runtime_selector(found, *spec)) return std::vector<lxb_dom_node_t*>{found};
+      return std::vector<lxb_dom_node_t*>{};
     } else {
-      return query_selector_spec_all(found, spec);
+      return query_selector_spec_all(found, *spec);
     }
   }
-  return query_selector_spec_all(node, spec);
+  return query_selector_spec_all(node, *spec);
 }
 
 }  // namespace detail
 
 // --- Public runtime query API ---
 
-[[nodiscard]] auto inline query_selector(lxb_dom_node_t* node, std::string_view selector) -> lxb_dom_node_t* {
+[[nodiscard]] auto inline query_selector(lxb_dom_node_t* node, std::string_view selector) noexcept -> std::expected<lxb_dom_node_t*, std::errc> {
   return detail::query_selector_runtime(node, selector);
 }
-[[nodiscard]] auto inline query_selector_all(lxb_dom_node_t* node, std::string_view selector) -> std::vector<lxb_dom_node_t*> {
+[[nodiscard]] auto inline query_selector_all(lxb_dom_node_t* node, std::string_view selector) noexcept -> std::expected<std::vector<lxb_dom_node_t*>, std::errc> {
   return detail::query_selector_all_runtime(node, selector);
 }
 [[nodiscard]] auto inline query_selector(
   lxb_dom_node_t* node,
   std::string_view selector,
-  document_id_index const& index) -> lxb_dom_node_t* {
+  document_id_index const& index) noexcept -> std::expected<lxb_dom_node_t*, std::errc> {
   return detail::query_selector_runtime(node, selector, index);
 }
 [[nodiscard]] auto inline query_selector_all(
   lxb_dom_node_t* node,
   std::string_view selector,
-  document_id_index const& index) -> std::vector<lxb_dom_node_t*> {
+  document_id_index const& index) noexcept -> std::expected<std::vector<lxb_dom_node_t*>, std::errc> {
   return detail::query_selector_all_runtime(node, selector, index);
 }
 

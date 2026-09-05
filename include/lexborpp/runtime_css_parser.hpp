@@ -3,7 +3,9 @@
 
 #include <array>
 #include <cstddef>
+#include <expected>
 #include <string_view>
+#include <system_error>
 
 #include "lexbor/dom/dom.h"
 #include "lexborpp/core.hpp"
@@ -31,7 +33,7 @@ template <std::size_t Max>
 constexpr auto parse_runtime_simple_selector(
   std::string_view input,
   std::size_t& pos,
-  selector_spec<Max>& result) -> bool {
+  selector_spec<Max>& result) noexcept -> bool {
   auto append = [&](auto&& simple) -> bool {
     if (result.simple_count >= result.simples.size()) return false;
     result.simples[result.simple_count++] = std::forward<decltype(simple)>(simple);
@@ -109,7 +111,7 @@ template <std::size_t Max>
 constexpr auto parse_runtime_compound_elements(
   std::string_view input,
   std::size_t& pos,
-  selector_spec<Max>& result) -> bool {
+  selector_spec<Max>& result) noexcept -> bool {
   if (pos >= input.size()) return false;
   if (!parse_runtime_simple_selector<Max>(input, pos, result)) return false;
   while (pos < input.size()) {
@@ -123,29 +125,29 @@ constexpr auto parse_runtime_compound_elements(
 
 template <std::size_t Max>
 [[nodiscard]] constexpr auto parse_runtime_selector(
-  std::string_view input) -> selector_spec<Max> {
+  std::string_view input) noexcept -> std::expected<selector_spec<Max>, std::errc> {
   auto result = selector_spec<Max>{};
   auto pos = std::size_t{0};
   skip_spaces(input, pos);
-  if (pos >= input.size()) return result;
+  if (pos >= input.size()) return std::unexpected(std::errc::invalid_argument);
   while (pos < input.size()) {
-    if (result.group_count >= result.groups.size()) break;
+    if (result.group_count >= result.groups.size()) {
+      return std::unexpected(std::errc::invalid_argument);
+    }
     auto& group = result.groups[result.group_count];
     group.compound_start = result.compound_count;
     group.compound_count = 0;
     auto relation = selector_combinator::descendant;
     while (true) {
       if (result.compound_count >= result.compounds.size()) {
-        result.group_count = 0;
-        return result;
+        return std::unexpected(std::errc::invalid_argument);
       }
       auto& compound = result.compounds[result.compound_count];
       auto const simple_start = result.simple_count;
       compound.simple_start = simple_start;
       compound.relation = relation;
       if (!parse_runtime_compound_elements<Max>(input, pos, result)) {
-        result.group_count = 0;
-        return result;
+        return std::unexpected(std::errc::invalid_argument);
       }
       compound.simple_count = result.simple_count - simple_start;
       ++result.compound_count;
@@ -166,19 +168,19 @@ template <std::size_t Max>
 }
 
 // Convenience; Max=32 gives ~3KB stack, Max=12 was 137KB via triple nesting.
-// セレクタ文字列の長さは最大 256 文字です。超過した場合は空の spec（0 件ヒット扱い）を
-// 返すのみでエラーを発しません。256 文字を超えるセレクタは parse_runtime_selector<N>
-// を直接使用してください。
+// セレクタ文字列の長さは最大 256 文字です。超過した場合はエラーを返します。
 [[nodiscard]] inline auto parse_runtime_selector_auto(
-  std::string_view input) -> selector_spec<32> {
-  if (input.size() > 256) return selector_spec<32>{};
+  std::string_view input) noexcept -> std::expected<selector_spec<32>, std::errc> {
+  if (input.size() > 256) return std::unexpected(std::errc::invalid_argument);
   return parse_runtime_selector<32>(input);
 }
 
 // Legacy alias for code that used runtime_selector_spec<12>
 template <std::size_t Max>
-constexpr auto parse_runtime_selector_legacy(std::string_view input) -> runtime_selector_spec<Max> {
-  return parse_runtime_selector<Max>(input);
+constexpr auto parse_runtime_selector_legacy(std::string_view input) noexcept -> runtime_selector_spec<Max> {
+  auto result = parse_runtime_selector<Max>(input);
+  if (!result) return {};
+  return *result;
 }
 
 }  // namespace detail
