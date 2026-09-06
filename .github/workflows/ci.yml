@@ -280,6 +280,17 @@ jobs:
             ~/vcpkg/bootstrap-vcpkg.sh
           fi
 
+      - name: Install wasmtime
+        id: wasmtime
+        run: |
+          WASMTIME_VERSION=$(curl -s https://api.github.com/repos/bytecodealliance/wasmtime/releases/latest | grep '"tag_name":' | sed -E 's/.*"v([^"]+)".*/\1/')
+          curl -sSL "https://github.com/bytecodealliance/wasmtime/releases/latest/download/wasmtime-v${WASMTIME_VERSION}-x86_64-linux.tar.xz" -o /tmp/wasmtime.tar.xz
+          tar -xf /tmp/wasmtime.tar.xz -C /tmp
+          WASMTIME_DIR="/tmp/wasmtime-v${WASMTIME_VERSION}-x86_64-linux"
+          echo "${WASMTIME_DIR}" >> $GITHUB_PATH
+          echo "dir=${WASMTIME_DIR}" >> $GITHUB_OUTPUT
+          "${WASMTIME_DIR}/wasmtime" --version
+
       - name: Build WASI minimal with vcpkg + wasi-sdk (wasm32-wasip1)
         run: |
           cmake -B build -S . -G Ninja \
@@ -287,19 +298,13 @@ jobs:
             -DVCPKG_TARGET_TRIPLET=wasm32-wasip1 \
             -DVCPKG_OVERLAY_TRIPLETS=$PWD/triplets \
             -DVCPKG_CHAINLOAD_TOOLCHAIN_FILE=/opt/wasi-sdk/share/cmake/wasi-sdk-p1.cmake \
+            -DCMAKE_CROSSCOMPILING_EMULATOR=${{ steps.wasmtime.outputs.dir }}/wasmtime \
             -DENABLE_WASI_MINIMAL=ON
           cmake --build build
           file build/test/smoke_wasi_minimal | grep -q WebAssembly
 
-      - name: Install wasmedge
-        run: |
-          curl -sSfL https://raw.githubusercontent.com/WasmEdge/WasmEdge/master/utils/install_v2.sh -o /tmp/wasmedge_install.sh
-          bash /tmp/wasmedge_install.sh
-
-      - name: Test (run wasm under wasmedge)
-        run: |
-          export PATH="$HOME/.wasmedge/bin:$PATH"
-          wasmedge build/test/smoke_wasi_minimal
+      - name: Test (wasmtime)
+        run: ctest --test-dir build -V
 
   linux-wasi-minimal-p2:
     runs-on: ubuntu-latest
@@ -345,6 +350,17 @@ jobs:
             ~/vcpkg/bootstrap-vcpkg.sh
           fi
 
+      - name: Install wasmtime
+        id: wasmtime
+        run: |
+          WASMTIME_VERSION=$(curl -s https://api.github.com/repos/bytecodealliance/wasmtime/releases/latest | grep '"tag_name":' | sed -E 's/.*"v([^"]+)".*/\1/')
+          curl -sSL "https://github.com/bytecodealliance/wasmtime/releases/latest/download/wasmtime-v${WASMTIME_VERSION}-x86_64-linux.tar.xz" -o /tmp/wasmtime.tar.xz
+          tar -xf /tmp/wasmtime.tar.xz -C /tmp
+          WASMTIME_DIR="/tmp/wasmtime-v${WASMTIME_VERSION}-x86_64-linux"
+          echo "${WASMTIME_DIR}" >> $GITHUB_PATH
+          echo "dir=${WASMTIME_DIR}" >> $GITHUB_OUTPUT
+          "${WASMTIME_DIR}/wasmtime" --version
+
       - name: Build WASI minimal with vcpkg + wasi-sdk (wasm32-wasip2)
         run: |
           cmake -B build -S . -G Ninja \
@@ -352,16 +368,10 @@ jobs:
             -DVCPKG_TARGET_TRIPLET=wasm32-wasip2 \
             -DVCPKG_OVERLAY_TRIPLETS=$PWD/triplets \
             -DVCPKG_CHAINLOAD_TOOLCHAIN_FILE=/opt/wasi-sdk/share/cmake/wasi-sdk-p2.cmake \
+            -DCMAKE_CROSSCOMPILING_EMULATOR=${{ steps.wasmtime.outputs.dir }}/wasmtime \
             -DENABLE_WASI_MINIMAL=ON
           cmake --build build
           file build/test/smoke_wasi_minimal | grep -q WebAssembly
 
-      - name: Install wasmedge
-        run: |
-          curl -sSfL https://raw.githubusercontent.com/WasmEdge/WasmEdge/master/utils/install_v2.sh -o /tmp/wasmedge_install.sh
-          bash /tmp/wasmedge_install.sh
-
-      - name: Test (run wasm under wasmedge)
-        run: |
-          export PATH="$HOME/.wasmedge/bin:$PATH"
-          wasmedge build/test/smoke_wasi_minimal
+      - name: Test (wasmtime)
+        run: ctest --test-dir build -V
