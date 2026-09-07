@@ -281,12 +281,12 @@ private:
  * @param attr_name 属性名です。
  * @return std::optional<std::string_view> 属性値を返します。存在しない場合は std::nullopt を返します。
  */
-auto inline get_attr_value(lxb_dom_node_t* node, std::string_view attr_name) noexcept -> std::optional<std::string_view> {
+auto inline get_attr_value(lxb_dom_node_t const* node, std::string_view attr_name) noexcept -> std::optional<std::string_view> {
   if (node == nullptr or is_non_element_node(node)) {
     return std::nullopt;
   }
 
-  auto* const element = lxb_dom_interface_element(node);
+  auto* const element = lxb_dom_interface_element(const_cast<lxb_dom_node_t*>(node));
   auto attr_val_len = size_t{};
 
   if (attr_name == "id") {
@@ -328,7 +328,7 @@ auto inline get_attr_value(lxb_dom_node_t* node, std::string_view attr_name) noe
     return false;
   }
 
-  auto const attr = get_attr_value(const_cast<lxb_dom_node_t*>(node), "class");
+  auto const attr = get_attr_value(node, "class");
   if (not attr.has_value()) {
     return false;
   }
@@ -377,12 +377,12 @@ auto inline get_attr_value(lxb_dom_node_t* node, std::string_view attr_name) noe
  * @param class_name 検索するクラス属性文字列（完全一致）です。
  * @return lxb_dom_node_t* 最初に見つかった要素を返します。見つからない場合は nullptr を返します。
  */
-auto inline get_first_element_by_class(lxb_dom_node_t* node, std::string_view class_name) noexcept -> lxb_dom_node_t* {
+auto inline get_first_element_by_class(lxb_dom_node_t const* node, std::string_view class_name) noexcept -> lxb_dom_node_t* {
   if (node == nullptr or class_name.empty()) {
     return nullptr;
   }
 
-  auto walker = node_walker{node};
+  auto walker = node_walker{const_cast<lxb_dom_node_t*>(node)};
   auto const it = std::ranges::find_if(walker, [&](lxb_dom_node_t* n) noexcept {
     return not is_non_element_node(n) && get_attr_value(n, "class") == class_name;
   });
@@ -397,13 +397,13 @@ auto inline get_first_element_by_class(lxb_dom_node_t* node, std::string_view cl
  * @return std::vector<lxb_dom_node_t*> マッチした全要素のリストを返します。
  * @note has_class 関数を使用して、空白区切りのリストからマッチングを行います。
  */
-[[nodiscard]] auto inline get_elements_by_class(lxb_dom_node_t* node, std::string_view class_name) -> std::vector<lxb_dom_node_t*> {
+[[nodiscard]] auto inline get_elements_by_class(lxb_dom_node_t const* node, std::string_view class_name) -> std::vector<lxb_dom_node_t*> {
   auto result = std::vector<lxb_dom_node_t*>{};
   if (node == nullptr or class_name.empty()) {
     return result;
   }
 
-  for (auto* current : node_walker{node}) {
+  for (auto* current : node_walker{const_cast<lxb_dom_node_t*>(node)}) {
     if (has_class(current, class_name)) {
       result.push_back(current);
     }
@@ -616,12 +616,12 @@ using document_ptr = std::unique_ptr<lxb_html_document_t, detail::document_delet
  * @param id_name 検索する id 属性値です。
  * @return lxb_dom_node_t* 最初に見つかった要素を返します。見つからない場合は nullptr を返します。
  */
-auto inline get_element_by_id(lxb_dom_node_t* node, std::string_view id_name) noexcept -> lxb_dom_node_t* {
+auto inline get_element_by_id(lxb_dom_node_t const* node, std::string_view id_name) noexcept -> lxb_dom_node_t* {
   if (node == nullptr) {
     return nullptr;
   }
 
-  auto walker = node_walker{node};
+  auto walker = node_walker{const_cast<lxb_dom_node_t*>(node)};
   auto const it = std::ranges::find_if(walker, [&](lxb_dom_node_t* n) noexcept {
     return not is_non_element_node(n) && get_attr_value(n, "id") == id_name;
   });
@@ -690,11 +690,11 @@ auto inline get_all_children_text(lxb_dom_node_t* node, std::string_view const s
  * @return lxb_dom_node_t* 一致したノードを返します。見つからない場合は nullptr を返します。
  */
 template <typename Op>
-auto inline get_following_element_by_op(lxb_dom_node_t* node, Op op) noexcept -> lxb_dom_node_t* {
+auto inline get_following_element_by_op(lxb_dom_node_t const* node, Op op) noexcept -> lxb_dom_node_t* {
   if (node == nullptr) {
     return nullptr;
   }
-  auto walker = node_walker{node};
+  auto walker = node_walker{const_cast<lxb_dom_node_t*>(node)};
   auto const it = std::ranges::find_if(walker, [&](lxb_dom_node_t* n) noexcept { return op(n); });
   return it != std::ranges::end(walker) ? *it : nullptr;
 }

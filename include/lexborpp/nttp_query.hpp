@@ -14,7 +14,7 @@ namespace lexborpp {
  * @brief NTTP で渡された CSS セレクタにマッチする最初の要素を返します。
  */
 template <detail::fixed_string Selector>
-[[nodiscard]] auto inline query_selector(lxb_dom_node_t* node) -> lxb_dom_node_t* {
+[[nodiscard]] auto inline query_selector(lxb_dom_node_t const* node) noexcept -> lxb_dom_node_t* {
   if constexpr (Selector.view().empty()) {
     return nullptr;
   } else {
@@ -26,7 +26,7 @@ template <detail::fixed_string Selector>
  * @brief NTTP で渡された CSS セレクタにマッチするすべての要素を返します。
  */
 template <detail::fixed_string Selector>
-[[nodiscard]] auto inline query_selector_all(lxb_dom_node_t* node) -> std::vector<lxb_dom_node_t*> {
+[[nodiscard]] auto inline query_selector_all(lxb_dom_node_t const* node) -> std::vector<lxb_dom_node_t*> {
   if constexpr (Selector.view().empty()) {
     return {};
   } else {
@@ -42,8 +42,8 @@ template <detail::fixed_string Selector>
  */
 template <detail::fixed_string Selector>
 [[nodiscard]] auto inline query_selector(
-  lxb_dom_node_t* node,
-  document_id_index const& index) -> lxb_dom_node_t* {
+  lxb_dom_node_t const* node,
+  document_id_index const& index) noexcept -> lxb_dom_node_t* {
   if constexpr (Selector.view().empty()) {
     return nullptr;
   } else {
@@ -59,7 +59,7 @@ template <detail::fixed_string Selector>
  */
 template <detail::fixed_string Selector>
 [[nodiscard]] auto inline query_selector_all(
-  lxb_dom_node_t* node,
+  lxb_dom_node_t const* node,
   document_id_index const& index) -> std::vector<lxb_dom_node_t*> {
   if constexpr (Selector.view().empty()) {
     return {};

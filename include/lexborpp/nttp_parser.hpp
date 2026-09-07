@@ -51,7 +51,7 @@ struct fixed_string {
    * @param rhs 比較対象です。
    * @return bool 内容が一致する場合に true を返します。
    */
-  constexpr auto operator==(fixed_string const& rhs) const -> bool = default;
+  constexpr auto operator==(fixed_string const& rhs) const noexcept -> bool = default;
 };
 
 /**
@@ -364,7 +364,7 @@ constexpr auto parse_name(std::string_view input, std::size_t& pos) noexcept -> 
  * 空文字列（`[attr=""]`）も有効な値として許容します。
  * 未終端の引用符は不正な selector とみなします。
  */
-constexpr auto parse_quoted_value(std::string_view input, std::size_t& pos) -> std::optional<std::string_view> {
+constexpr auto parse_quoted_value(std::string_view input, std::size_t& pos) noexcept -> std::optional<std::string_view> {
   auto const quote = input[pos];
   ++pos;
   auto const begin = pos;
@@ -427,13 +427,13 @@ struct selector_spec {
 /**
  * @brief 要素ノードの qualified name を文字列として取得します。
  */
-[[nodiscard]] constexpr auto node_qualified_name(lxb_dom_node_t* node) noexcept -> std::string_view {
+[[nodiscard]] constexpr auto node_qualified_name(lxb_dom_node_t const* node) noexcept -> std::string_view {
   if (node == nullptr || is_non_element_node(node)) {
     return {};
   }
 
   auto len = size_t{};
-  auto* const data = lxb_dom_element_qualified_name(lxb_dom_interface_element(node), &len);
+  auto* const data = lxb_dom_element_qualified_name(lxb_dom_interface_element(const_cast<lxb_dom_node_t*>(node)), &len);
   if (data == nullptr) {
     return {};
   }
@@ -444,12 +444,12 @@ struct selector_spec {
 /**
  * @brief 直前の要素兄弟を返します。
  */
-[[nodiscard]] constexpr auto prev_element_sibling(lxb_dom_node_t* node) noexcept -> lxb_dom_node_t* {
+[[nodiscard]] constexpr auto prev_element_sibling(lxb_dom_node_t const* node) noexcept -> lxb_dom_node_t* {
   if (node == nullptr) {
     return nullptr;
   }
 
-  for (auto* prev = lxb_dom_node_prev(node); prev != nullptr; prev = lxb_dom_node_prev(prev)) {
+  for (auto* prev = lxb_dom_node_prev(const_cast<lxb_dom_node_t*>(node)); prev != nullptr; prev = lxb_dom_node_prev(prev)) {
     if (not is_non_element_node(prev)) {
       return prev;
     }
@@ -460,8 +460,8 @@ struct selector_spec {
 /**
  * @brief `candidate` が `scope` 自身または `scope` の子孫かを判定します。
  */
-[[nodiscard]] constexpr auto is_descendant_of(lxb_dom_node_t* candidate, lxb_dom_node_t* scope) noexcept -> bool {
-  for (auto* n = candidate; n != nullptr; n = n->parent) {
+[[nodiscard]] constexpr auto is_descendant_of(lxb_dom_node_t const* candidate, lxb_dom_node_t const* scope) noexcept -> bool {
+  for (auto* n = const_cast<lxb_dom_node_t*>(candidate); n != nullptr; n = n->parent) {
     if (n == scope) {
       return true;
     }
@@ -475,12 +475,12 @@ struct selector_spec {
  * @param node 対象ノードです。
  * @return lxb_dom_node_t* 親要素ノードを返します。存在しない場合は nullptr を返します。
  */
-[[nodiscard]] constexpr auto parent_element(lxb_dom_node_t* node) noexcept -> lxb_dom_node_t* {
+[[nodiscard]] constexpr auto parent_element(lxb_dom_node_t const* node) noexcept -> lxb_dom_node_t* {
   if (node == nullptr) {
     return nullptr;
   }
 
-  auto* parent = node->parent;
+  auto* parent = const_cast<lxb_dom_node_t*>(node)->parent;
   while (parent != nullptr && is_non_element_node(parent)) {
     parent = parent->parent;
   }

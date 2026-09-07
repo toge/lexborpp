@@ -21,7 +21,7 @@ namespace lexborpp {
  * @endcode
  */
 template <lxb_tag_id_t... Tags>
-inline constexpr auto tag = std::views::filter([](lxb_dom_node_t* node) noexcept {
+inline constexpr auto tag = std::views::filter([](lxb_dom_node_t const* node) noexcept {
   return node != nullptr && ((node->local_name == Tags) || ...);
 });
 
@@ -37,7 +37,7 @@ inline constexpr auto tag = std::views::filter([](lxb_dom_node_t* node) noexcept
  */
 template <detail::fixed_string Id>
 inline constexpr auto id = std::views::filter(
-    [](lxb_dom_node_t* node) noexcept { return lexborpp::get_attr_value(node, "id") == Id.view(); });
+    [](lxb_dom_node_t const* node) noexcept { return lexborpp::get_attr_value(node, "id") == Id.view(); });
 
 /**
  * @brief 指定した class 属性値のいずれかを持つノードのみを通過させる Range アダプタです。
@@ -51,7 +51,7 @@ inline constexpr auto id = std::views::filter(
  * @endcode
  */
 template <detail::fixed_string... Classes>
-inline constexpr auto clazz = std::views::filter([](lxb_dom_node_t* node) noexcept {
+inline constexpr auto clazz = std::views::filter([](lxb_dom_node_t const* node) noexcept {
   auto const class_value = lexborpp::get_attr_value(node, "class");
   return class_value.has_value() && ((*class_value == Classes.view()) || ...);
 });
@@ -69,7 +69,7 @@ inline constexpr auto clazz = std::views::filter([](lxb_dom_node_t* node) noexce
  */
 template <detail::fixed_string Attr, detail::fixed_string Value>
 inline constexpr auto attr = std::views::filter(
-    [](lxb_dom_node_t* node) noexcept { return lexborpp::get_attr_value(node, Attr.view()) == Value.view(); });
+    [](lxb_dom_node_t const* node) noexcept { return lexborpp::get_attr_value(node, Attr.view()) == Value.view(); });
 }  // namespace lexborpp
 
 #endif  // LEXBORPP_NTTP_RANGE_ADAPTERS_HPP_

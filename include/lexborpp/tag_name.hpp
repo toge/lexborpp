@@ -15,7 +15,7 @@ namespace lexborpp {
  * @note このマッピングは Lexbor のタグ列挙 (`LXB_TAG_*`) と手動で同期しています。
  *       新しいタグが Lexbor に追加された場合はこの switch も更新が必要です。
  */
-auto inline tag_name(lxb_tag_id_t const tag_id) {
+auto inline tag_name(lxb_tag_id_t const tag_id) noexcept {
   using namespace std::string_view_literals;
   switch(tag_id) {
   case LXB_TAG__UNDEF: return "UNDEF"sv;

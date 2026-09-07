@@ -28,7 +28,7 @@ class document_id_index {
 public:
   document_id_index() = default;
 
-  explicit document_id_index(lxb_dom_node_t* root) {
+  explicit document_id_index(lxb_dom_node_t const* root) {
     build(root);
   }
 
@@ -44,16 +44,16 @@ public:
   [[nodiscard]] bool empty() const noexcept { return map_.empty(); }
   [[nodiscard]] auto size() const noexcept -> std::size_t { return map_.size(); }
 
-  void rebuild(lxb_dom_node_t* root) {
+  void rebuild(lxb_dom_node_t const* root) {
     map_.clear();
     build(root);
   }
 
 private:
-  void build(lxb_dom_node_t* root) {
+  void build(lxb_dom_node_t const* root) {
     if (root == nullptr) return;
     map_.reserve(128); // ponytail: 1k idsで-26%、flat_hash_mapは依存増で却下
-    for (auto* node : node_walker{root}) {
+    for (auto* node : node_walker{const_cast<lxb_dom_node_t*>(root)}) {
       if (is_non_element_node(node)) continue;
       auto const id = get_attr_value(node, "id");
       if (id.has_value() && !id->empty()) {

@@ -22,7 +22,7 @@ inline constexpr auto compiled_selector_v = parse_selector_spec<Selector>();
 // --- Match a single simple selector (compile-time kind dispatch) ---
 template <detail::fixed_string Selector, std::size_t GI, std::size_t CompoundI, std::size_t SimpleI>
 [[nodiscard]] constexpr auto match_simple(
-  lxb_dom_node_t* node) noexcept -> bool {
+  lxb_dom_node_t const* node) noexcept -> bool {
   constexpr auto& spec = compiled_selector_v<Selector>;
   constexpr auto& g = spec.groups[GI];
   constexpr auto& c = spec.compounds[g.compound_start + CompoundI];
@@ -59,14 +59,14 @@ template <detail::fixed_string Selector, std::size_t GI, std::size_t CompoundI, 
 // --- Match all simple selectors in compound I (AND via fold) ---
 template <detail::fixed_string Selector, std::size_t GI, std::size_t CompoundI, std::size_t... SimpleIs>
 [[nodiscard]] constexpr auto match_compound_impl(
-  lxb_dom_node_t* node,
+  lxb_dom_node_t const* node,
   std::index_sequence<SimpleIs...>) noexcept -> bool {
   return (... && match_simple<Selector, GI, CompoundI, SimpleIs>(node));
 }
 
 template <detail::fixed_string Selector, std::size_t GI, std::size_t CompoundI>
 [[nodiscard]] constexpr auto match_compound(
-  lxb_dom_node_t* node) noexcept -> bool {
+  lxb_dom_node_t const* node) noexcept -> bool {
   constexpr auto& spec = compiled_selector_v<Selector>;
   constexpr auto& g = spec.groups[GI];
   constexpr auto& c = spec.compounds[g.compound_start + CompoundI];
@@ -79,7 +79,7 @@ template <detail::fixed_string Selector, std::size_t GI, std::size_t CompoundI>
 // Base case: I == 0, just match this compound
 template <detail::fixed_string Selector, std::size_t GI, std::size_t I = 0>
 [[nodiscard]] constexpr auto match_compound_chain(
-  lxb_dom_node_t* node) noexcept -> bool {
+  lxb_dom_node_t const* node) noexcept -> bool {
   return match_compound<Selector, GI, I>(node);
 }
 
@@ -87,7 +87,7 @@ template <detail::fixed_string Selector, std::size_t GI, std::size_t I = 0>
 template <detail::fixed_string Selector, std::size_t GI, std::size_t I>
   requires (I > 0)
 [[nodiscard]] constexpr auto match_compound_chain(
-  lxb_dom_node_t* node) noexcept -> bool {
+  lxb_dom_node_t const* node) noexcept -> bool {
   if (not match_compound<Selector, GI, I>(node)) {
     return false;
   }
@@ -122,7 +122,7 @@ template <detail::fixed_string Selector, std::size_t GI, std::size_t I>
 // --- Match a selector group ---
 template <detail::fixed_string Selector, std::size_t GI>
 [[nodiscard]] constexpr auto match_group(
-  lxb_dom_node_t* node) noexcept -> bool {
+  lxb_dom_node_t const* node) noexcept -> bool {
   constexpr auto& g = compiled_selector_v<Selector>.groups[GI];
   constexpr auto compound_count = g.compound_count;
   if constexpr (compound_count == 0) {
@@ -135,7 +135,7 @@ template <detail::fixed_string Selector, std::size_t GI>
 // --- Match all selector groups (comma-separated) ---
 template <detail::fixed_string Selector, std::size_t... GIs>
 [[nodiscard]] constexpr auto match_all_groups(
-  lxb_dom_node_t* node,
+  lxb_dom_node_t const* node,
   std::index_sequence<GIs...>) noexcept -> bool {
   return (... || match_group<Selector, GIs>(node));
 }
@@ -143,7 +143,7 @@ template <detail::fixed_string Selector, std::size_t... GIs>
 // --- Public match entry point ---
 template <detail::fixed_string Selector>
 [[nodiscard]] constexpr auto match_selector_compiled(
-  lxb_dom_node_t* node) noexcept -> bool {
+  lxb_dom_node_t const* node) noexcept -> bool {
   if (node == nullptr) {
     return false;
   }
@@ -154,11 +154,11 @@ template <detail::fixed_string Selector>
 
 // --- Query implementations (walk DOM, test each node) ---
 template <detail::fixed_string Selector>
-[[nodiscard]] auto inline query_selector_impl(lxb_dom_node_t* node) -> lxb_dom_node_t* {
+[[nodiscard]] auto inline query_selector_impl(lxb_dom_node_t const* node) noexcept -> lxb_dom_node_t* {
   if (node == nullptr) {
     return nullptr;
   }
-  for (auto* current : node_walker{node}) {
+  for (auto* current : node_walker{const_cast<lxb_dom_node_t*>(node)}) {
     if (is_non_element_node(current)) {
       continue;
     }
@@ -170,13 +170,13 @@ template <detail::fixed_string Selector>
 }
 
 template <detail::fixed_string Selector>
-[[nodiscard]] auto inline query_selector_all_impl(lxb_dom_node_t* node) -> std::vector<lxb_dom_node_t*> {
+[[nodiscard]] auto inline query_selector_all_impl(lxb_dom_node_t const* node) -> std::vector<lxb_dom_node_t*> {
   auto result = std::vector<lxb_dom_node_t*>{};
   if (node == nullptr) {
     return result;
   }
   result.reserve(16);
-  for (auto* current : node_walker{node}) {
+  for (auto* current : node_walker{const_cast<lxb_dom_node_t*>(node)}) {
     if (is_non_element_node(current)) {
       continue;
     }
@@ -197,7 +197,7 @@ struct nttp_id_info {
 };
 
 template <detail::fixed_string Selector>
-constexpr auto compiled_id_info() -> nttp_id_info {
+constexpr auto compiled_id_info() noexcept -> nttp_id_info {
   constexpr auto& spec = compiled_selector_v<Selector>;
   if constexpr (spec.group_count != 1) {
     return {};
@@ -220,8 +220,8 @@ constexpr auto compiled_id_info() -> nttp_id_info {
 //       結果は古いノードを指す可能性があります。検索の直前に rebuild してください。
 template <detail::fixed_string Selector>
 [[nodiscard]] auto inline query_selector_impl(
-  lxb_dom_node_t* node,
-  document_id_index const& index) -> lxb_dom_node_t* {
+  lxb_dom_node_t const* node,
+  document_id_index const& index) noexcept -> lxb_dom_node_t* {
   if (node == nullptr) {
     return nullptr;
   }
@@ -247,7 +247,7 @@ template <detail::fixed_string Selector>
 
 template <detail::fixed_string Selector>
 [[nodiscard]] auto inline query_selector_all_impl(
-  lxb_dom_node_t* node,
+  lxb_dom_node_t const* node,
   document_id_index const& index) -> std::vector<lxb_dom_node_t*> {
   if (node == nullptr) {
     return {};

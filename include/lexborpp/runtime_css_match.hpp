@@ -18,7 +18,7 @@ namespace detail {
 
 // Match one simple selector against a node (flat)
 [[nodiscard]] inline auto match_runtime_simple(
-  lxb_dom_node_t* node,
+  lxb_dom_node_t const* node,
   selector_simple_spec const& simple) noexcept -> bool {
   if (simple.kind == selector_simple_kind::universal) {
     return not is_non_element_node(node);
@@ -44,7 +44,7 @@ namespace detail {
 // Match all simples in a compound (AND)
 template <std::size_t Max>
 [[nodiscard]] inline auto match_runtime_compound(
-  lxb_dom_node_t* node,
+  lxb_dom_node_t const* node,
   selector_spec<Max> const& spec,
   std::size_t compound_idx) noexcept -> bool {
   if (node == nullptr || is_non_element_node(node)) return false;
@@ -59,7 +59,7 @@ template <std::size_t Max>
 // Recursive right-to-left chain matching (flat)
 template <std::size_t Max>
 [[nodiscard]] inline auto match_runtime_chain(
-  lxb_dom_node_t* node,
+  lxb_dom_node_t const* node,
   selector_spec<Max> const& spec,
   std::size_t group_idx,
   std::size_t compound_pos) noexcept -> bool {
@@ -91,7 +91,7 @@ template <std::size_t Max>
 
 template <std::size_t Max>
 [[nodiscard]] inline auto match_runtime_group(
-  lxb_dom_node_t* node,
+  lxb_dom_node_t const* node,
   selector_spec<Max> const& spec,
   std::size_t group_idx) noexcept -> bool {
   auto const& g = spec.groups[group_idx];
@@ -101,7 +101,7 @@ template <std::size_t Max>
 
 template <std::size_t Max>
 [[nodiscard]] inline auto match_runtime_selector(
-  lxb_dom_node_t* node,
+  lxb_dom_node_t const* node,
   selector_spec<Max> const& spec) noexcept -> bool {
   if (node == nullptr) return false;
   for (auto i = std::size_t{0}; i < spec.group_count; ++i) {
@@ -114,10 +114,10 @@ template <std::size_t Max>
 
 template <std::size_t Max>
 [[nodiscard]] inline auto query_selector_spec_first(
-  lxb_dom_node_t* node,
+  lxb_dom_node_t const* node,
   selector_spec<Max> const& spec) noexcept -> lxb_dom_node_t* {
   if (node == nullptr) return nullptr;
-  for (auto* cur : node_walker{node}) {
+  for (auto* cur : node_walker{const_cast<lxb_dom_node_t*>(node)}) {
     if (is_non_element_node(cur)) continue;
     if (match_runtime_selector(cur, spec)) return cur;
   }
@@ -126,12 +126,12 @@ template <std::size_t Max>
 
 template <std::size_t Max>
 [[nodiscard]] inline auto query_selector_spec_all(
-  lxb_dom_node_t* node,
+  lxb_dom_node_t const* node,
   selector_spec<Max> const& spec) noexcept -> std::vector<lxb_dom_node_t*> {
   auto result = std::vector<lxb_dom_node_t*>{};
   if (node == nullptr) return result;
   result.reserve(16);
-  for (auto* cur : node_walker{node}) {
+  for (auto* cur : node_walker{const_cast<lxb_dom_node_t*>(node)}) {
     if (is_non_element_node(cur)) continue;
     if (match_runtime_selector(cur, spec)) result.push_back(cur);
   }
@@ -140,7 +140,7 @@ template <std::size_t Max>
 
 // Public API: query_selector (runtime) - returns std::expected
 [[nodiscard]] inline auto query_selector_runtime(
-  lxb_dom_node_t* node,
+  lxb_dom_node_t const* node,
   std::string_view selector) noexcept -> std::expected<lxb_dom_node_t*, std::errc> {
   if (node == nullptr || selector.empty()) return std::unexpected(std::errc::invalid_argument);
   auto spec = parse_runtime_selector_auto(selector);
@@ -149,7 +149,7 @@ template <std::size_t Max>
 }
 
 [[nodiscard]] inline auto query_selector_all_runtime(
-  lxb_dom_node_t* node,
+  lxb_dom_node_t const* node,
   std::string_view selector) noexcept -> std::expected<std::vector<lxb_dom_node_t*>, std::errc> {
   if (node == nullptr || selector.empty()) return std::unexpected(std::errc::invalid_argument);
   auto spec = parse_runtime_selector_auto(selector);
@@ -187,7 +187,7 @@ template <std::size_t Max>
 
 // query_selector_runtime with index (expanded: supports id in any compound)
 [[nodiscard]] inline auto query_selector_runtime(
-  lxb_dom_node_t* node,
+  lxb_dom_node_t const* node,
   std::string_view selector,
   document_id_index const& index) noexcept -> std::expected<lxb_dom_node_t*, std::errc> {
   if (node == nullptr || selector.empty()) return std::unexpected(std::errc::invalid_argument);
@@ -210,7 +210,7 @@ template <std::size_t Max>
 }
 
 [[nodiscard]] inline auto query_selector_all_runtime(
-  lxb_dom_node_t* node,
+  lxb_dom_node_t const* node,
   std::string_view selector,
   document_id_index const& index) noexcept -> std::expected<std::vector<lxb_dom_node_t*>, std::errc> {
   if (node == nullptr || selector.empty()) return std::unexpected(std::errc::invalid_argument);
@@ -241,20 +241,20 @@ template <std::size_t Max>
 
 // --- Public runtime query API ---
 
-[[nodiscard]] auto inline query_selector(lxb_dom_node_t* node, std::string_view selector) noexcept -> std::expected<lxb_dom_node_t*, std::errc> {
+[[nodiscard]] auto inline query_selector(lxb_dom_node_t const* node, std::string_view selector) noexcept -> std::expected<lxb_dom_node_t*, std::errc> {
   return detail::query_selector_runtime(node, selector);
 }
-[[nodiscard]] auto inline query_selector_all(lxb_dom_node_t* node, std::string_view selector) noexcept -> std::expected<std::vector<lxb_dom_node_t*>, std::errc> {
+[[nodiscard]] auto inline query_selector_all(lxb_dom_node_t const* node, std::string_view selector) noexcept -> std::expected<std::vector<lxb_dom_node_t*>, std::errc> {
   return detail::query_selector_all_runtime(node, selector);
 }
 [[nodiscard]] auto inline query_selector(
-  lxb_dom_node_t* node,
+  lxb_dom_node_t const* node,
   std::string_view selector,
   document_id_index const& index) noexcept -> std::expected<lxb_dom_node_t*, std::errc> {
   return detail::query_selector_runtime(node, selector, index);
 }
 [[nodiscard]] auto inline query_selector_all(
-  lxb_dom_node_t* node,
+  lxb_dom_node_t const* node,
   std::string_view selector,
   document_id_index const& index) noexcept -> std::expected<std::vector<lxb_dom_node_t*>, std::errc> {
   return detail::query_selector_all_runtime(node, selector, index);
