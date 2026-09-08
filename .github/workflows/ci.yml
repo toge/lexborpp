@@ -224,7 +224,9 @@ jobs:
           cmake -B build -S . -G Ninja \
             -DCMAKE_TOOLCHAIN_FILE=$HOME/vcpkg/scripts/buildsystems/vcpkg.cmake \
             -DVCPKG_TARGET_TRIPLET=wasm32-emscripten \
-            -DVCPKG_CHAINLOAD_TOOLCHAIN_FILE=$EMSDK/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake
+            -DVCPKG_CHAINLOAD_TOOLCHAIN_FILE=$EMSDK/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake \
+            -DCMAKE_C_FLAGS="-O3 -msimd128" \
+            -DCMAKE_CXX_FLAGS="-O3 -msimd128"
 
       - name: Build
         run: |
@@ -299,7 +301,9 @@ jobs:
             -DVCPKG_OVERLAY_TRIPLETS=$PWD/triplets \
             -DVCPKG_CHAINLOAD_TOOLCHAIN_FILE=/opt/wasi-sdk/share/cmake/wasi-sdk-p1.cmake \
             -DCMAKE_CROSSCOMPILING_EMULATOR=${{ steps.wasmtime.outputs.dir }}/wasmtime \
-            -DENABLE_WASI_MINIMAL=ON
+            -DENABLE_WASI_MINIMAL=ON \
+            -DCMAKE_C_FLAGS="-O3 -msimd128" \
+            -DCMAKE_CXX_FLAGS="-O3 -msimd128"
           cmake --build build
           file build/test/smoke_wasi_minimal | grep -q WebAssembly
 
@@ -369,7 +373,9 @@ jobs:
             -DVCPKG_OVERLAY_TRIPLETS=$PWD/triplets \
             -DVCPKG_CHAINLOAD_TOOLCHAIN_FILE=/opt/wasi-sdk/share/cmake/wasi-sdk-p2.cmake \
             -DCMAKE_CROSSCOMPILING_EMULATOR=${{ steps.wasmtime.outputs.dir }}/wasmtime \
-            -DENABLE_WASI_MINIMAL=ON
+            -DENABLE_WASI_MINIMAL=ON \
+            -DCMAKE_C_FLAGS="-O3 -msimd128" \
+            -DCMAKE_CXX_FLAGS="-O3 -msimd128"
           cmake --build build
           file build/test/smoke_wasi_minimal | grep -q WebAssembly
 
