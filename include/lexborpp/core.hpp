@@ -92,9 +92,11 @@ auto constexpr inline is_non_element_node(lxb_dom_node_t const* node) noexcept -
 
 /**
  * @brief ノードを要素型に変換します（キャスト）。
+ *
+ * 要素ノード以外 (テキスト、コメント、document など) に対しては nullptr を返します。
  */
 [[nodiscard]] auto constexpr inline as_element(lxb_dom_node_t* node) noexcept -> lxb_dom_element_t* {
-  if (node == nullptr) {
+  if (node == nullptr || node->type != LXB_DOM_NODE_TYPE_ELEMENT) {
     return nullptr;
   }
   return lxb_dom_interface_element(node);
@@ -102,9 +104,11 @@ auto constexpr inline is_non_element_node(lxb_dom_node_t const* node) noexcept -
 
 /**
  * @brief ノードを要素型（const）に変換します（キャスト）。
+ *
+ * 要素ノード以外に対しては nullptr を返します。
  */
 [[nodiscard]] auto constexpr inline as_element(lxb_dom_node_t const* node) noexcept -> lxb_dom_element_t const* {
-  if (node == nullptr) {
+  if (node == nullptr || node->type != LXB_DOM_NODE_TYPE_ELEMENT) {
     return nullptr;
   }
   return reinterpret_cast<lxb_dom_element_t const*>(node);
@@ -515,7 +519,8 @@ auto inline get_first_element_by_class(lxb_dom_node_t const* node, std::string_v
  * @return bool 設定に成功した場合に true を返します。
  */
 [[nodiscard]] auto inline set_text_content(lxb_dom_node_t* node, std::string_view text) noexcept -> bool {
-  if (node == nullptr) {
+  if (node == nullptr || node->type != LXB_DOM_NODE_TYPE_ELEMENT) {
+    // テキストノードやコメントに子を足すと不正な DOM になるため、要素のみ受け付ける。
     return false;
   }
 

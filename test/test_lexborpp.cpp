@@ -1392,3 +1392,47 @@ TEST_CASE("serialize and attribute helpers tolerate null nodes") {
   }
 }
 
+TEST_CASE("non-element nodes fail safely on element-only operations") {
+  auto fixture = html_document_fixture{R"(<div id="host"><p>old</p><!--note--></div>)"};
+  auto* root = fixture.document_node();
+
+  auto p_result = lexborpp::query_selector(root, "p");
+  REQUIRE(p_result.has_value());
+  auto* p = p_result.value();
+  REQUIRE(p != nullptr);
+
+  auto* text = lxb_dom_node_first_child(p);
+  REQUIRE(text != nullptr);
+  REQUIRE(text->type == LXB_DOM_NODE_TYPE_TEXT);
+
+  lxb_dom_node_t* comment = nullptr;
+  for (auto* node : lexborpp::node_walker{root}) {
+    if (node->type == LXB_DOM_NODE_TYPE_COMMENT) {
+      comment = node;
+      break;
+    }
+  }
+  REQUIRE(comment != nullptr);
+
+  SECTION("as_element returns nullptr for non-element nodes") {
+    REQUIRE(lexborpp::as_element(text) == nullptr);
+    REQUIRE(lexborpp::as_element(comment) == nullptr);
+
+    lxb_dom_node_t const* const_text = text;
+    REQUIRE(lexborpp::as_element(const_text) == nullptr);
+  }
+
+  SECTION("set_attr via a text node cast fails") {
+    REQUIRE_FALSE(lexborpp::set_attr(lexborpp::as_element(text), "data-x", "1"));
+  }
+
+  SECTION("set_text_content on a text node fails and keeps the DOM intact") {
+    REQUIRE_FALSE(lexborpp::set_text_content(text, "new"));
+    REQUIRE(lexborpp::outer_html(p) == "<p>old</p>");
+  }
+
+  SECTION("set_text_content on a comment node fails") {
+    REQUIRE_FALSE(lexborpp::set_text_content(comment, "new"));
+  }
+}
+
