@@ -1,14 +1,33 @@
 #include <array>
 #include <concepts>
+#include <cstdlib>
 #include <ranges>
 #include "catch2/catch_all.hpp"
 
+#include <new>
 #include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
 
 #include "test_support.hpp"
+
+// OOM 変換の回帰テスト用: フラグが立っている間だけグローバル new を失敗させる。
+// 通常の確保は malloc にフォワードするため、フラグが立っていない限り
+// Catch2 自身の動作には影響しない。
+namespace lexborpp_test {
+inline thread_local bool fail_allocations = false;
+}
+
+void* operator new(std::size_t count) {
+  if (lexborpp_test::fail_allocations) {
+    throw std::bad_alloc{};
+  }
+  if (void* p = std::malloc(count)) {
+    return p;
+  }
+  throw std::bad_alloc{};
+}
 
 namespace {
 
@@ -1536,6 +1555,32 @@ TEST_CASE("runtime selector limits are rejected with invalid_argument") {
     }
     too_many.pop_back();
     REQUIRE_FALSE(lexborpp::query_selector(root, too_many).has_value());
+  }
+}
+
+TEST_CASE("indexed query_selector_all converts OOM into not_enough_memory") {
+  auto fixture = html_document_fixture{R"(<span id="s1">x</span>)"};
+  auto* root = fixture.document_node();
+  auto index = lexborpp::document_id_index{root};
+
+  SECTION("fast path (id in the rightmost compound)") {
+    // インデックス fast path の要素 1 つ分の vector 確保も
+    // noexcept 境界から terminate せず expected のエラーに変換されること。
+    lexborpp_test::fail_allocations = true;
+    auto result = lexborpp::query_selector_all(root, "#s1", index);
+    lexborpp_test::fail_allocations = false;
+
+    REQUIRE_FALSE(result.has_value());
+    REQUIRE(result.error() == std::errc::not_enough_memory);
+  }
+
+  SECTION("slow path (scan)") {
+    lexborpp_test::fail_allocations = true;
+    auto result = lexborpp::query_selector_all(root, "span", index);
+    lexborpp_test::fail_allocations = false;
+
+    REQUIRE_FALSE(result.has_value());
+    REQUIRE(result.error() == std::errc::not_enough_memory);
   }
 }
 
