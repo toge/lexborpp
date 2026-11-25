@@ -40,9 +40,12 @@ Lexbor 自体は C 製の高速な HTML パーサです。公式ドキュメン�
 ## WASI Minimal モード
 
 wasip1 (`wasm32-wasip1` / wasi-sdk) 向けに、例外なしでビルドできるモードです。
-`LEXBORPP_WASI_MINIMAL` 定義時は NTTP パーサの例外送出が `std::abort()` に置き換わり、
-`-fno-exceptions` でライブラリ全体 (NTTP 版セレクタ含む) がビルドできます。
-コンパイル時評価での不正セレクタは従来どおりコンパイルエラーになります。
+`-DENABLE_WASI_MINIMAL=ON` で configure すると `LEXBORPP_WASI_MINIMAL=1` が
+`lexborpp::lexborpp` ターゲットの INTERFACE 定義として利用者にも伝搬します。
+`-fno-exceptions` でビルドした場合、NTTP パーサの不正入力は
+`LEXBORPP_CONSTEVAL_FAIL` 経由で `std::abort()` に置き換わり、ライブラリ全体
+(NTTP 版セレクタ含む) が例外なしでビルドできます。コンパイル時評価での不正
+セレクタは従来どおりコンパイルエラーになります。
 
 ```bash
 cmake -B build-wasi -S . -G Ninja \
@@ -50,9 +53,10 @@ cmake -B build-wasi -S . -G Ninja \
   -DVCPKG_TARGET_TRIPLET=wasm32-wasip1 \
   -DVCPKG_OVERLAY_TRIPLETS=$PWD/triplets \
   -DVCPKG_CHAINLOAD_TOOLCHAIN_FILE=/opt/wasi-sdk/share/cmake/wasi-sdk-p1.cmake \
+  -DCMAKE_CROSSCOMPILING_EMULATOR=$(which wasmtime) \
   -DENABLE_WASI_MINIMAL=ON
 cmake --build build-wasi
-wasmedge build-wasi/test/smoke_wasi_minimal
+wasmtime build-wasi/test/smoke_wasi_minimal
 ```
 
 `triplets/wasm32-wasip1.cmake` を同梱しているので、`-DVCPKG_OVERLAY_TRIPLETS=$PWD/triplets` で利用できます。
@@ -216,8 +220,8 @@ auto dump_ready_items(lxb_dom_node_t* root) -> void {
 | `get_elements_by_class(node, class_name)` | 開始ノードを含め、class トークンが一致する全要素を返す |
 | `get_following_element_by_op(node, op)` | 開始ノード自身と子孫を深さ優先で走査し、述語 `op` が最初に true を返したノードを返す（名前に反して "following 軸" ではない点に注意） |
 | `get_sibling_element_by_op(node, op)` | 指定ノード自身から後続兄弟を順に述語 `op` で判定し、最初に一致したノードを返す |
-| `query_selector(node, selector)` | CSS selector に一致する最初の要素を返す |
-| `query_selector_all(node, selector)` | CSS selector に一致する全要素を返す |
+| `query_selector(node, selector)` | CSS selector に一致する最初の要素を `std::expected<lxb_dom_node_t*, std::errc>` で返す |
+| `query_selector_all(node, selector)` | CSS selector に一致する全要素を `std::expected<std::vector<lxb_dom_node_t*>, std::errc>` で返す |
 | `query_selector<"...">(node)` | NTTP で渡した CSS selector に一致する最初の要素を返す |
 | `query_selector_all<"...">(node)` | NTTP で渡した CSS selector に一致する全要素を返す |
 | `document_id_index(root)` | 指定ルート配下の `id` 属性ノードをハッシュテーブルに保持する |
@@ -227,7 +231,7 @@ auto dump_ready_items(lxb_dom_node_t* root) -> void {
 | `query_selector<"...">(node, index)` | NTTP selector + インデックスでルート参照を改善した最初の要素を返す |
 | `query_selector_all<"...">(node, index)` | NTTP selector + インデックスでルート参照を改善した全要素を返す |
 
-> **インデックス利用の前提**: セレクタの右端 compound に `id` simple selector が含まれる場合のみインデックスを参照します。それ以外は通常の DOM ツリー走査にフォールバックします。
+> **インデックス利用の前提**: セレクタの右端 compound に `id` simple selector が含まれる場合のみインデックスを参照します。それ以外は通常の DOM ツリー走査にフォールバックします。インデックス付き検索と通常検索は、すべての combinator で同じ結果になります。
 >
 > **スナップショットであることに注意**: `document_id_index` は構築時点の `id` マップです。DOM を編集（id の変更・ノードの削除）した後は自動追従しません。編集後に検索する場合は `rebuild()` で作り直してください。また、文書内で `id` が重複している場合、最初に見つかったノードのみが登録されます。
 
@@ -250,10 +254,10 @@ auto dump_ready_items(lxb_dom_node_t* root) -> void {
 
 | API | 説明 |
 | --- | --- |
-| `as_element(node)` | `lxb_dom_node_t const*` を `lxb_dom_element_t*` に変換する |
+| `as_element(node)` | `lxb_dom_node_t*` を `lxb_dom_element_t*` に変換する。要素ノード以外 (テキスト・コメント・document など) は `nullptr` を返す |
 | `set_attr(element, name, value)` | 属性を追加 / 更新する |
 | `remove_attr(element, name)` | 属性を削除する |
-| `set_text_content(node, text)` | 既存の子ノードを消してテキストノードへ置き換える |
+| `set_text_content(node, text)` | 既存の子ノードを消してテキストノードへ置き換える。要素ノード以外は `false` を返す |
 
 ### Walker / range アダプタ
 
@@ -301,7 +305,11 @@ ctest --test-dir build -V
 - `get_first_child_text()` / `get_all_children_text()` は直下のテキストノードだけを対象にします
 - `get_deep_text()` は子孫全体のテキストを対象にします
 - `query_selector()` は無効な selector や初期化失敗時に `nullptr` を返し、`query_selector_all()` は空配列を返します
-  - 実行時版 (`query_selector(node, selector)`) は**不正な selector も無音で「0 件ヒット」扱い**になります。NTTP 版のようなコンパイル時エラー検出はないため、selector 文字列の誤りに注意してください
+  - 実行時版 (`query_selector(node, selector)`) は `std::expected` を返します。**不正な selector は `std::errc::invalid_argument` のエラー値**になり、メモリ割り当てに失敗した場合は `std::errc::not_enough_memory` になります
+- 実行時 selector の上限は **256 バイト**、compound / group / simple selector はそれぞれ **32 個**までです。超過は `std::errc::invalid_argument` になります
+- 実行時 selector の**末尾カンマ** (`"div,"` など) は NTTP 版と同じく不正入力です
+- `[attr^=""]` / `[attr$=""]` / `[attr*=""]` は CSS 仕様どおり**何にも一致しません**。`[attr=""]` は空の属性値に一致します
+- SVG の `<text>` のように Lexbor が動的にタグ ID を登録する要素も、`text` / `svg text` のような type selector で一致します
 - `query_selector()` / `query_selector_all()` と `query_selector<"...">()` / `query_selector_all<"...">()` は、いずれも**開始ノード自身を探索対象に含みます**（root 参加挙動を統一しています）
 - `query_selector<"...">()` / `query_selector_all<"...">()` はコンパイル時解析済みの selector を使います。未対応構文はコンパイルエラーになります
 - walker / range アダプタは Lexbor の生ポインタをそのまま返すため、元の `lxb_html_document_t` の寿命内でだけ使ってください

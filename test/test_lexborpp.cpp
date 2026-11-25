@@ -1512,6 +1512,33 @@ TEST_CASE("runtime parser rejects trailing commas like the NTTP parser") {
   }
 }
 
+TEST_CASE("runtime selector limits are rejected with invalid_argument") {
+  auto fixture = html_document_fixture{R"(<div id="a"></div>)"};
+  auto* root = fixture.document_node();
+
+  SECTION("selector longer than 256 bytes is rejected") {
+    auto const too_long = std::string(257, 'a');
+    REQUIRE_FALSE(lexborpp::query_selector(root, too_long).has_value());
+    REQUIRE_FALSE(lexborpp::query_selector_all(root, too_long).has_value());
+  }
+
+  SECTION("a 256-byte selector is accepted") {
+    auto const ok = std::string(256, 'a');
+    auto result = lexborpp::query_selector(root, ok);
+    REQUIRE(result.has_value());
+    REQUIRE(result.value() == nullptr);
+  }
+
+  SECTION("more than 32 groups is rejected") {
+    auto too_many = std::string{};
+    for (auto i = 0; i < 33; ++i) {
+      too_many += "a,";
+    }
+    too_many.pop_back();
+    REQUIRE_FALSE(lexborpp::query_selector(root, too_many).has_value());
+  }
+}
+
 TEST_CASE("indexed queries match normal scans for every combinator") {
   auto const html = R"HTML(
     <div id="wrap">
