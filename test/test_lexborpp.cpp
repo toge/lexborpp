@@ -1436,3 +1436,98 @@ TEST_CASE("non-element nodes fail safely on element-only operations") {
   }
 }
 
+TEST_CASE("indexed queries match normal scans for every combinator") {
+  auto const html = R"HTML(
+    <div id="wrap">
+      <i id="a"></i><span id="s1"></span><span id="s2"></span>
+      <em id="e"><span id="s3"></span></em>
+    </div>
+    <section id="sec"><p id="deep">x</p></section>
+  )HTML";
+  auto fixture = html_document_fixture{html};
+  auto* root = fixture.document_node();
+  auto index = lexborpp::document_id_index{root};
+
+  auto collect_ids = [](std::vector<lxb_dom_node_t*> const& nodes) {
+    auto ids = std::vector<std::string>{};
+    for (auto* node : nodes) {
+      ids.push_back(std::string{lexborpp::get_attr_value(node, "id").value_or("")});
+    }
+    return ids;
+  };
+
+  SECTION("runtime adjacent sibling (#a + span)") {
+    auto plain = lexborpp::query_selector(root, "#a + span");
+    auto indexed = lexborpp::query_selector(root, "#a + span", index);
+    REQUIRE(plain.has_value());
+    REQUIRE(indexed.has_value());
+    REQUIRE(plain.value() != nullptr);
+    REQUIRE(indexed.value() == plain.value());
+    REQUIRE(lexborpp::get_attr_value(indexed.value(), "id") == "s1");
+
+    auto all_plain = lexborpp::query_selector_all(root, "#a + span");
+    auto all_indexed = lexborpp::query_selector_all(root, "#a + span", index);
+    REQUIRE(all_plain.has_value());
+    REQUIRE(all_indexed.has_value());
+    REQUIRE(collect_ids(all_indexed.value()) == collect_ids(all_plain.value()));
+    REQUIRE(collect_ids(all_indexed.value()) == std::vector<std::string>{"s1"});
+  }
+
+  SECTION("runtime following sibling (#a ~ span)") {
+    auto plain = lexborpp::query_selector(root, "#a ~ span");
+    auto indexed = lexborpp::query_selector(root, "#a ~ span", index);
+    REQUIRE(plain.has_value());
+    REQUIRE(indexed.has_value());
+    REQUIRE(indexed.value() == plain.value());
+    REQUIRE(lexborpp::get_attr_value(indexed.value(), "id") == "s1");
+
+    auto all_indexed = lexborpp::query_selector_all(root, "#a ~ span", index);
+    REQUIRE(all_indexed.has_value());
+    REQUIRE(collect_ids(all_indexed.value()) == std::vector<std::string>{"s1", "s2"});
+  }
+
+  SECTION("runtime descendant with id in a non-rightmost compound (#wrap span)") {
+    auto plain = lexborpp::query_selector(root, "#wrap span");
+    auto indexed = lexborpp::query_selector(root, "#wrap span", index);
+    REQUIRE(plain.has_value());
+    REQUIRE(indexed.has_value());
+    REQUIRE(indexed.value() == plain.value());
+    REQUIRE(lexborpp::get_attr_value(indexed.value(), "id") == "s1");
+
+    auto all_indexed = lexborpp::query_selector_all(root, "#wrap span", index);
+    REQUIRE(all_indexed.has_value());
+    REQUIRE(collect_ids(all_indexed.value()) == std::vector<std::string>{"s1", "s2", "s3"});
+  }
+
+  SECTION("runtime id in the rightmost compound keeps the fast path") {
+    auto plain = lexborpp::query_selector(root, "section > p#deep");
+    auto indexed = lexborpp::query_selector(root, "section > p#deep", index);
+    REQUIRE(plain.has_value());
+    REQUIRE(indexed.has_value());
+    REQUIRE(plain.value() != nullptr);
+    REQUIRE(indexed.value() == plain.value());
+    REQUIRE(lexborpp::get_attr_value(indexed.value(), "id") == "deep");
+  }
+
+  SECTION("NTTP matches normal scans for every combinator") {
+    REQUIRE(lexborpp::query_selector<"#a + span">(root, index)
+      == lexborpp::query_selector<"#a + span">(root));
+    REQUIRE(lexborpp::get_attr_value(lexborpp::query_selector<"#a + span">(root), "id") == "s1");
+
+    REQUIRE(lexborpp::query_selector<"#a ~ span">(root, index)
+      == lexborpp::query_selector<"#a ~ span">(root));
+
+    REQUIRE(lexborpp::query_selector<"#wrap span">(root, index)
+      == lexborpp::query_selector<"#wrap span">(root));
+
+    auto all_siblings = lexborpp::query_selector_all<"#a ~ span">(root, index);
+    REQUIRE(collect_ids(all_siblings) == std::vector<std::string>{"s1", "s2"});
+
+    auto all_wrap = lexborpp::query_selector_all<"#wrap span">(root, index);
+    REQUIRE(collect_ids(all_wrap) == std::vector<std::string>{"s1", "s2", "s3"});
+
+    REQUIRE(lexborpp::query_selector<"section > p#deep">(root, index)
+      == lexborpp::query_selector<"section > p#deep">(root));
+  }
+}
+

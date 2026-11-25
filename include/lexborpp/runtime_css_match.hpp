@@ -185,7 +185,10 @@ template <std::size_t Max>
   return {};
 }
 
-// query_selector_runtime with index (expanded: supports id in any compound)
+// query_selector_runtime with index
+// インデックスを使うのは id が右端 compound にある場合のみ。それ以外は
+// id ノードの部分木だけを見ても後続兄弟・子孫を見落とすため、通常の
+// DOM 走査にフォールバックする (README の契約どおり)。
 [[nodiscard]] inline auto query_selector_runtime(
   lxb_dom_node_t const* node,
   std::string_view selector,
@@ -195,16 +198,11 @@ template <std::size_t Max>
   if (!spec) return std::unexpected(spec.error());
   if (spec->group_count == 0) return std::unexpected(std::errc::invalid_argument);
   auto const pf = runtime_get_id_prefilter(*spec);
-  if (pf.found) {
+  if (pf.found && pf.is_last) {
     auto* found = index.find(pf.value);
     if (found == nullptr || !is_descendant_of(found, node)) return nullptr;
-    if (pf.is_last) {
-      if (match_runtime_selector(found, *spec)) return found;
-      return nullptr;
-    } else {
-      // id is not in rightmost compound: limit search to subtree of found
-      return query_selector_spec_first(found, *spec);
-    }
+    if (match_runtime_selector(found, *spec)) return found;
+    return nullptr;
   }
   return query_selector_spec_first(node, *spec);
 }
@@ -218,21 +216,11 @@ template <std::size_t Max>
   if (!spec) return std::unexpected(spec.error());
   if (spec->group_count == 0) return std::unexpected(std::errc::invalid_argument);
   auto const pf = runtime_get_id_prefilter(*spec);
-  if (pf.found) {
+  if (pf.found && pf.is_last) {
     auto* found = index.find(pf.value);
     if (found == nullptr || !is_descendant_of(found, node)) return std::vector<lxb_dom_node_t*>{};
-    if (pf.is_last && spec->groups[0].compound_count == 1) {
-      if (match_runtime_selector(found, *spec)) return std::vector<lxb_dom_node_t*>{found};
-      return std::vector<lxb_dom_node_t*>{};
-    }
-    if (pf.is_last) {
-      // last compound has id but group has multiple compounds: still single-node check suffices
-      // because rightmost compound is the id; if that node matches whole chain, it's unique.
-      if (match_runtime_selector(found, *spec)) return std::vector<lxb_dom_node_t*>{found};
-      return std::vector<lxb_dom_node_t*>{};
-    } else {
-      return query_selector_spec_all(found, *spec);
-    }
+    if (match_runtime_selector(found, *spec)) return std::vector<lxb_dom_node_t*>{found};
+    return std::vector<lxb_dom_node_t*>{};
   }
   return query_selector_spec_all(node, *spec);
 }

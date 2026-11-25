@@ -54,7 +54,7 @@ template <detail::fixed_string Selector>
 /**
  * @brief ID 逆引きインデックスを利用して CSS セレクタにマッチする全要素を返します。
  *
- * 単一 compound かつ id selector を含む場合のみインデックス経由でルックアップします。
+ * 右端の compound に id selector が含まれる場合のみインデックス経由でルックアップします。
  * それ以外は通常のツリー走査にフォールバックします。
  */
 template <detail::fixed_string Selector>

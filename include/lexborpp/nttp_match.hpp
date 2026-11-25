@@ -218,6 +218,9 @@ constexpr auto compiled_id_info() noexcept -> nttp_id_info {
 // --- Query implementations with document_id_index ---
 // NOTE: インデックスは構築時のスナップショットです。構築後に DOM を編集した場合、
 //       結果は古いノードを指す可能性があります。検索の直前に rebuild してください。
+//       インデックス fast path は id が右端 compound にある場合のみ使う。それ以外は
+//       id ノードの部分木だけを走査すると後続兄弟・子孫を見落とすため、通常の
+//       DOM 走査にフォールバックする (README の契約どおり)。
 template <detail::fixed_string Selector>
 [[nodiscard]] auto inline query_selector_impl(
   lxb_dom_node_t const* node,
@@ -226,20 +229,11 @@ template <detail::fixed_string Selector>
     return nullptr;
   }
   constexpr auto info = compiled_id_info<Selector>();
-  if constexpr (info.found) {
+  if constexpr (info.found && info.is_last) {
     auto* found = index.find(info.value);
     if (found == nullptr || !is_descendant_of(found, node)) return nullptr;
-    if constexpr (info.is_last) {
-      if (match_selector_compiled<Selector>(found)) return found;
-      return nullptr;
-    } else {
-      // id is not in last compound: limit search to subtree of found
-      for (auto* cur : node_walker{found}) {
-        if (is_non_element_node(cur)) continue;
-        if (match_selector_compiled<Selector>(cur)) return cur;
-      }
-      return nullptr;
-    }
+    if (match_selector_compiled<Selector>(found)) return found;
+    return nullptr;
   } else {
     return query_selector_impl<Selector>(node);
   }
@@ -253,26 +247,11 @@ template <detail::fixed_string Selector>
     return {};
   }
   constexpr auto info = compiled_id_info<Selector>();
-  if constexpr (info.found) {
+  if constexpr (info.found && info.is_last) {
     auto* found = index.find(info.value);
     if (found == nullptr || !is_descendant_of(found, node)) return {};
-    if constexpr (info.is_last) {
-      if constexpr (compiled_selector_v<Selector>.groups[0].compound_count == 1) {
-        if (match_selector_compiled<Selector>(found)) return {found};
-        return {};
-      } else {
-        if (match_selector_compiled<Selector>(found)) return {found};
-        return {};
-      }
-    } else {
-      auto result = std::vector<lxb_dom_node_t*>{};
-      result.reserve(16);
-      for (auto* cur : node_walker{found}) {
-        if (is_non_element_node(cur)) continue;
-        if (match_selector_compiled<Selector>(cur)) result.push_back(cur);
-      }
-      return result;
-    }
+    if (match_selector_compiled<Selector>(found)) return {found};
+    return {};
   } else {
     return query_selector_all_impl<Selector>(node);
   }
