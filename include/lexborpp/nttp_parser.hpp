@@ -509,11 +509,12 @@ struct selector_spec {
     return attr_value == expected || (attr_value.size() > expected.size() &&
       attr_value.starts_with(expected) && attr_value[expected.size()] == '-');
   case selector_attribute_match::prefix:
-    return attr_value.starts_with(expected);
+    // CSS 仕様: 空の期待値は何にも一致しない。
+    return !expected.empty() && attr_value.starts_with(expected);
   case selector_attribute_match::suffix:
-    return attr_value.ends_with(expected);
+    return !expected.empty() && attr_value.ends_with(expected);
   case selector_attribute_match::substring:
-    return attr_value.find(expected) != std::string_view::npos;
+    return !expected.empty() && attr_value.find(expected) != std::string_view::npos;
   }
 
   return false;

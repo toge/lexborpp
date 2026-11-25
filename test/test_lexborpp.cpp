@@ -1459,6 +1459,38 @@ TEST_CASE("SVG text elements are found by type selectors") {
   }
 }
 
+TEST_CASE("empty expected values never match for substring-like operators") {
+  auto fixture = html_document_fixture{
+    R"(<p id="empty" data-x=""></p><p id="full" data-x="abc"></p>)"};
+  auto* root = fixture.document_node();
+
+  SECTION("runtime ^= $= *= with empty value match nothing") {
+    for (auto const* sel : {"[data-x^=\"\"]", "[data-x$=\"\"]", "[data-x*=\"\"]"}) {
+      auto result = lexborpp::query_selector(root, sel);
+      REQUIRE(result.has_value());
+      REQUIRE(result.value() == nullptr);
+    }
+  }
+
+  SECTION("runtime = with empty value still matches") {
+    auto result = lexborpp::query_selector(root, "[data-x=\"\"]");
+    REQUIRE(result.has_value());
+    REQUIRE(lexborpp::get_attr_value(result.value(), "id") == "empty");
+  }
+
+  SECTION("NTTP ^= $= *= with empty value match nothing") {
+    REQUIRE(lexborpp::query_selector<"[data-x^=\"\"]">(root) == nullptr);
+    REQUIRE(lexborpp::query_selector<"[data-x$=\"\"]">(root) == nullptr);
+    REQUIRE(lexborpp::query_selector<"[data-x*=\"\"]">(root) == nullptr);
+  }
+
+  SECTION("NTTP = with empty value still matches") {
+    auto* node = lexborpp::query_selector<"[data-x=\"\"]">(root);
+    REQUIRE(node != nullptr);
+    REQUIRE(lexborpp::get_attr_value(node, "id") == "empty");
+  }
+}
+
 TEST_CASE("indexed queries match normal scans for every combinator") {
   auto const html = R"HTML(
     <div id="wrap">
