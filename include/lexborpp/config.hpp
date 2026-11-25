@@ -4,10 +4,11 @@
  * @file lexborpp/config.hpp
  * @brief ビルドモード設定。
  *
- * lexborpp は既定で例外を許容するが、ランタイム時の例外送出は禁止する。
+ * lexborpp は既定で例外を許容します。
  * コンパイル時評価での不正入力は LEXBORPP_CONSTEVAL_FAIL で通知する。
  * (-fno-exceptions 時は std::abort() になる)
- * ランタイム API の失敗は std::expected<T, std::errc> で返す。
+ * runtime selector API の失敗は std::expected<T, std::errc> で返し、
+ * シリアライズ API の割り当て失敗は std::bad_alloc を送出します。
  */
 
 #include <cstdlib>
@@ -42,8 +43,8 @@ namespace lexborpp::detail {
  * @brief noexcept 境界から bad_alloc を漏らさないためのガードです。
  *
  * `f()` を実行し、`std::bad_alloc` のみ `on_oom()` の戻り値へ変換します。
- * -fno-exceptions では try/catch を書けないため直接実行します
- * (割り当て失敗は libstdc++ / libc++ が abort します)。
+ * -fno-exceptions では try/catch を書けないため直接実行します。
+ * この場合、割り当て失敗の扱いは標準ライブラリに委ねられます。
  */
 #ifdef __cpp_exceptions
 template <typename F, typename OnOOM>

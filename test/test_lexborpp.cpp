@@ -20,20 +20,59 @@
 #ifndef __EMSCRIPTEN__
 namespace lexborpp_test {
 inline thread_local bool fail_allocations = false;
+inline thread_local bool fail_after_first_allocation = false;
 }
 
+#if defined(_MSC_VER)
+#define LEXBORPP_TEST_NOINLINE __declspec(noinline)
+#else
+#define LEXBORPP_TEST_NOINLINE __attribute__((noinline))
+#endif
+
+LEXBORPP_TEST_NOINLINE
 void* operator new(std::size_t count) {
   if (lexborpp_test::fail_allocations) {
-    throw std::bad_alloc{};
+    if (lexborpp_test::fail_after_first_allocation) {
+      lexborpp_test::fail_after_first_allocation = false;
+    } else {
+      throw std::bad_alloc{};
+    }
   }
   if (void* p = std::malloc(count)) {
     return p;
   }
   throw std::bad_alloc{};
 }
+
+LEXBORPP_TEST_NOINLINE
+void operator delete(void* ptr) noexcept {
+  std::free(ptr);
+}
+
+LEXBORPP_TEST_NOINLINE
+void operator delete(void* ptr, std::size_t) noexcept {
+  std::free(ptr);
+}
+
+#undef LEXBORPP_TEST_NOINLINE
 #endif
 
 namespace {
+
+#ifndef __EMSCRIPTEN__
+class allocation_failure_scope {
+public:
+  explicit allocation_failure_scope(bool after_first = false) {
+    lexborpp_test::fail_allocations = true;
+    lexborpp_test::fail_after_first_allocation = after_first;
+  }
+
+  ~allocation_failure_scope() {
+    lexborpp_test::fail_allocations = false;
+    lexborpp_test::fail_after_first_allocation = false;
+  }
+};
+#endif
 
 template <typename Walker>
 concept ranges_compatible_walker =
@@ -1571,21 +1610,56 @@ TEST_CASE("indexed query_selector_all converts OOM into not_enough_memory") {
   SECTION("fast path (id in the rightmost compound)") {
     // インデックス fast path の要素 1 つ分の vector 確保も
     // noexcept 境界から terminate せず expected のエラーに変換されること。
-    lexborpp_test::fail_allocations = true;
-    auto result = lexborpp::query_selector_all(root, "#s1", index);
-    lexborpp_test::fail_allocations = false;
-
+    auto result = [&] {
+      auto const fail = allocation_failure_scope{};
+      return lexborpp::query_selector_all(root, "#s1", index);
+    }();
     REQUIRE_FALSE(result.has_value());
     REQUIRE(result.error() == std::errc::not_enough_memory);
   }
 
   SECTION("slow path (scan)") {
-    lexborpp_test::fail_allocations = true;
-    auto result = lexborpp::query_selector_all(root, "span", index);
-    lexborpp_test::fail_allocations = false;
-
+    auto result = [&] {
+      auto const fail = allocation_failure_scope{};
+      return lexborpp::query_selector_all(root, "span", index);
+    }();
     REQUIRE_FALSE(result.has_value());
     REQUIRE(result.error() == std::errc::not_enough_memory);
+  }
+}
+
+TEST_CASE("serialization propagates OOM instead of returning partial output") {
+  auto html = std::string{R"(<div id="target">)"};
+  html.append(600, 'x');
+  html += R"(<span>second</span>third</div>)";
+  auto fixture = html_document_fixture{html};
+  auto* target = fixture.by_id("target");
+  REQUIRE(target != nullptr);
+
+  auto propagated_bad_alloc = false;
+
+  SECTION("outer_html") {
+    {
+      auto const fail = allocation_failure_scope{true};
+      try {
+        std::ignore = lexborpp::outer_html(target);
+      } catch (std::bad_alloc const&) {
+        propagated_bad_alloc = true;
+      }
+    }
+    REQUIRE(propagated_bad_alloc);
+  }
+
+  SECTION("inner_html") {
+    {
+      auto const fail = allocation_failure_scope{true};
+      try {
+        std::ignore = lexborpp::inner_html(target);
+      } catch (std::bad_alloc const&) {
+        propagated_bad_alloc = true;
+      }
+    }
+    REQUIRE(propagated_bad_alloc);
   }
 }
 #endif

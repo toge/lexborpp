@@ -27,6 +27,18 @@ inline auto serialize_callback(const lxb_char_t* data, size_t len, void* ctx) no
     [] { return LXB_STATUS_ERROR_MEMORY_ALLOCATION; });
 }
 
+[[noreturn]] inline auto raise_serialization_error(lxb_status_t status) -> void {
+#ifdef __cpp_exceptions
+  if (status == LXB_STATUS_ERROR_MEMORY_ALLOCATION) {
+    throw std::bad_alloc{};
+  }
+  throw std::runtime_error{"Lexbor serialization failed"};
+#else
+  (void)status;
+  std::abort();
+#endif
+}
+
 } // namespace detail
 
 /**
@@ -36,7 +48,11 @@ inline auto serialize_callback(const lxb_char_t* data, size_t len, void* ctx) no
   if (node == nullptr) return "";
   auto result = std::string{};
   result.reserve(512); // ponytail: 128では2.5KB要素で再確保、512で1回に
-  lxb_html_serialize_tree_cb(const_cast<lxb_dom_node_t*>(node), detail::serialize_callback, &result);
+  auto const status =
+    lxb_html_serialize_tree_cb(const_cast<lxb_dom_node_t*>(node), detail::serialize_callback, &result);
+  if (status != LXB_STATUS_OK) {
+    detail::raise_serialization_error(status);
+  }
   return result;
 }
 
@@ -48,7 +64,10 @@ inline auto serialize_callback(const lxb_char_t* data, size_t len, void* ctx) no
   auto result = std::string{};
   result.reserve(512);
   for (auto* child = lxb_dom_node_first_child(const_cast<lxb_dom_node_t*>(node)); child != nullptr; child = lxb_dom_node_next(child)) {
-    lxb_html_serialize_tree_cb(child, detail::serialize_callback, &result);
+    auto const status = lxb_html_serialize_tree_cb(child, detail::serialize_callback, &result);
+    if (status != LXB_STATUS_OK) {
+      detail::raise_serialization_error(status);
+    }
   }
   return result;
 }

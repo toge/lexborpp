@@ -45,7 +45,10 @@ wasip1 (`wasm32-wasip1` / wasi-sdk) 向けに、例外なしでビルドでき�
 `-fno-exceptions` でビルドした場合、NTTP パーサの不正入力は
 `LEXBORPP_CONSTEVAL_FAIL` 経由で `std::abort()` に置き換わり、ライブラリ全体
 (NTTP 版セレクタ含む) が例外なしでビルドできます。コンパイル時評価での不正
-セレクタは従来どおりコンパイルエラーになります。
+セレクタは従来どおりコンパイルエラーになります。`-fno-exceptions` ビルドでは
+通常の C++ 例外を使えないため、メモリ割り当て失敗を
+`std::errc::not_enough_memory` へ変換することはできません。その場合は標準
+ライブラリの割り当て失敗経路（通常はabort）に従います。
 
 ```bash
 cmake -B build-wasi -S . -G Ninja \
@@ -135,7 +138,12 @@ auto main() -> int {
   }
 
   auto* root = lexborpp::get_root(doc_expected.value());
-  auto* featured = lexborpp::query_selector(root, "li.featured");
+  auto featured_result = lexborpp::query_selector(root, "li.featured");
+  if (!featured_result.has_value()) {
+    std::cerr << "invalid selector\n";
+    return EXIT_FAILURE;
+  }
+  auto* featured = featured_result.value();
   if (featured == nullptr) {
     std::cerr << "element not found\n";
     return EXIT_FAILURE;
@@ -149,7 +157,12 @@ auto main() -> int {
   std::cout << "text: " << lexborpp::get_deep_text(featured) << '\n';
   std::cout << "html: " << lexborpp::outer_html(featured) << '\n';
 
-  for (auto* node : lexborpp::query_selector_all(root, "li.item")) {
+  auto items_result = lexborpp::query_selector_all(root, "li.item");
+  if (!items_result.has_value()) {
+    std::cerr << "selector query failed\n";
+    return EXIT_FAILURE;
+  }
+  for (auto* node : items_result.value()) {
     if (auto const id = lexborpp::get_attr_value(node, "id"); id.has_value()) {
       std::cout << "id=" << *id << '\n';
     }
@@ -304,8 +317,10 @@ ctest --test-dir build -V
 - `get_first_element_by_class()` と `clazz<"...">` は `class` 属性文字列の完全一致です
 - `get_first_child_text()` / `get_all_children_text()` は直下のテキストノードだけを対象にします
 - `get_deep_text()` は子孫全体のテキストを対象にします
-- `query_selector()` は無効な selector や初期化失敗時に `nullptr` を返し、`query_selector_all()` は空配列を返します
-  - 実行時版 (`query_selector(node, selector)`) は `std::expected` を返します。**不正な selector は `std::errc::invalid_argument` のエラー値**になり、メモリ割り当てに失敗した場合は `std::errc::not_enough_memory` になります
+- 実行時版 (`query_selector(node, selector)`) は `std::expected` を返します。成功時に一致するノードがなければ `nullptr`、`query_selector_all()` では空配列を保持します。**不正な selector は `std::errc::invalid_argument` のエラー値**になります
+  - 例外有効ビルドで `query_selector_all()` のメモリ割り当てに失敗した場合は `std::errc::not_enough_memory` になります
+  - `-fno-exceptions` ビルドでは C++ の割り当て失敗を捕捉できないため、標準ライブラリの失敗経路（通常はabort）になります
+- `outer_html()` / `inner_html()` のメモリ割り当てに失敗すると、例外有効ビルドでは `std::bad_alloc` を送出します。部分的に生成されたHTMLを正常な戻り値として返しません
 - 実行時 selector の上限は **256 バイト**、compound / group / simple selector はそれぞれ **32 個**までです。超過は `std::errc::invalid_argument` になります
 - 実行時 selector の**末尾カンマ** (`"div,"` など) は NTTP 版と同じく不正入力です
 - `[attr^=""]` / `[attr$=""]` / `[attr*=""]` は CSS 仕様どおり**何にも一致しません**。`[attr=""]` は空の属性値に一致します
