@@ -154,7 +154,15 @@ template <std::size_t Max>
       ++group.compound_count;
       skip_spaces(input, pos);
       if (pos >= input.size()) break;
-      if (input[pos] == ',') { ++pos; skip_spaces(input, pos); break; }
+      if (input[pos] == ',') {
+        ++pos;
+        skip_spaces(input, pos);
+        if (pos >= input.size()) {
+          // NTTP 版と同じく末尾カンマは不正入力。
+          return std::unexpected(std::errc::invalid_argument);
+        }
+        break;
+      }
       if (input[pos] == '>') { relation = selector_combinator::child; ++pos; skip_spaces(input, pos); continue; }
       if (input[pos] == '+') { relation = selector_combinator::adjacent_sibling; ++pos; skip_spaces(input, pos); continue; }
       if (input[pos] == '~') { relation = selector_combinator::following_sibling; ++pos; skip_spaces(input, pos); continue; }

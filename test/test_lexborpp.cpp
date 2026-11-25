@@ -1491,6 +1491,27 @@ TEST_CASE("empty expected values never match for substring-like operators") {
   }
 }
 
+TEST_CASE("runtime parser rejects trailing commas like the NTTP parser") {
+  auto fixture = html_document_fixture{R"(<div id="a"><span></span></div>)"};
+  auto* root = fixture.document_node();
+
+  SECTION("trailing comma is invalid") {
+    REQUIRE_FALSE(lexborpp::query_selector(root, "div,").has_value());
+    REQUIRE_FALSE(lexborpp::query_selector_all(root, "div,").has_value());
+  }
+
+  SECTION("trailing comma with spaces is invalid") {
+    REQUIRE_FALSE(lexborpp::query_selector(root, "div,   ").has_value());
+    REQUIRE_FALSE(lexborpp::query_selector_all(root, "div,   ").has_value());
+  }
+
+  SECTION("comma between groups stays valid") {
+    auto result = lexborpp::query_selector(root, "div, span");
+    REQUIRE(result.has_value());
+    REQUIRE(result.value() != nullptr);
+  }
+}
+
 TEST_CASE("indexed queries match normal scans for every combinator") {
   auto const html = R"HTML(
     <div id="wrap">
