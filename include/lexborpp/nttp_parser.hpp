@@ -551,12 +551,12 @@ constexpr auto parse_selector_spec() {
 
   skip_spaces(input, pos);
   if (pos >= input.size()) {
-    LEXBORPP_THROW(std::runtime_error{"NTTP CSS selector must not be empty"});
+    LEXBORPP_CONSTEVAL_FAIL(std::runtime_error{"NTTP CSS selector must not be empty"});
   }
 
   while (pos < input.size()) {
     if (result.group_count >= max) {
-      LEXBORPP_THROW(std::runtime_error{"NTTP CSS selector is too complex"});
+      LEXBORPP_CONSTEVAL_FAIL(std::runtime_error{"NTTP CSS selector is too complex"});
     }
 
     auto& group = result.groups[result.group_count];
@@ -566,7 +566,7 @@ constexpr auto parse_selector_spec() {
     auto relation = selector_combinator::descendant;
     while (true) {
       if (result.compound_count >= max) {
-        LEXBORPP_THROW(std::runtime_error{"NTTP CSS selector is too complex"});
+        LEXBORPP_CONSTEVAL_FAIL(std::runtime_error{"NTTP CSS selector is too complex"});
       }
 
       auto& compound = result.compounds[result.compound_count];
@@ -589,7 +589,7 @@ constexpr auto parse_selector_spec() {
         ++pos;
         skip_spaces(input, pos);
         if (pos >= input.size()) {
-          LEXBORPP_THROW(std::runtime_error{"NTTP CSS selector must not end with a comma"});
+          LEXBORPP_CONSTEVAL_FAIL(std::runtime_error{"NTTP CSS selector must not end with a comma"});
         }
         break;
       }
@@ -620,11 +620,11 @@ constexpr auto parse_selector_spec() {
         continue;
       }
 
-      LEXBORPP_THROW(std::runtime_error{"NTTP CSS selector token is invalid"});
+      LEXBORPP_CONSTEVAL_FAIL(std::runtime_error{"NTTP CSS selector token is invalid"});
     }
 
     if (group.compound_count == 0) {
-      LEXBORPP_THROW(std::runtime_error{"NTTP CSS selector group must not be empty"});
+      LEXBORPP_CONSTEVAL_FAIL(std::runtime_error{"NTTP CSS selector group must not be empty"});
     }
 
     result.group_count++;
@@ -643,13 +643,13 @@ constexpr auto parse_simple_selector(
   selector_spec<Max>& result) -> void {
   auto append = [&](auto&& simple) {
     if (result.simple_count >= result.simples.size()) {
-      LEXBORPP_THROW(std::runtime_error{"NTTP CSS selector is too complex"});
+      LEXBORPP_CONSTEVAL_FAIL(std::runtime_error{"NTTP CSS selector is too complex"});
     }
     result.simples[result.simple_count++] = std::forward<decltype(simple)>(simple);
   };
 
   if (pos >= input.size()) {
-    LEXBORPP_THROW(std::runtime_error{"NTTP CSS selector ended unexpectedly"});
+    LEXBORPP_CONSTEVAL_FAIL(std::runtime_error{"NTTP CSS selector ended unexpectedly"});
   }
 
   if (input[pos] == '*') {
@@ -662,7 +662,7 @@ constexpr auto parse_simple_selector(
     ++pos;
     auto const value = parse_name(input, pos);
     if (value.empty()) {
-      LEXBORPP_THROW(std::runtime_error{"NTTP CSS selector id must not be empty"});
+      LEXBORPP_CONSTEVAL_FAIL(std::runtime_error{"NTTP CSS selector id must not be empty"});
     }
     append(selector_simple_spec{.kind = selector_simple_kind::id, .value = value});
     return;
@@ -672,7 +672,7 @@ constexpr auto parse_simple_selector(
     ++pos;
     auto const value = parse_name(input, pos);
     if (value.empty()) {
-      LEXBORPP_THROW(std::runtime_error{"NTTP CSS selector class must not be empty"});
+      LEXBORPP_CONSTEVAL_FAIL(std::runtime_error{"NTTP CSS selector class must not be empty"});
     }
     append(selector_simple_spec{.kind = selector_simple_kind::class_name, .value = value});
     return;
@@ -683,7 +683,7 @@ constexpr auto parse_simple_selector(
     skip_spaces(input, pos);
     auto const name = parse_name(input, pos);
     if (name.empty()) {
-      LEXBORPP_THROW(std::runtime_error{"NTTP CSS selector attribute name must not be empty"});
+      LEXBORPP_CONSTEVAL_FAIL(std::runtime_error{"NTTP CSS selector attribute name must not be empty"});
     }
     skip_spaces(input, pos);
 
@@ -709,12 +709,12 @@ constexpr auto parse_simple_selector(
         match = selector_attribute_match::substring;
         pos += 2;
       } else {
-        LEXBORPP_THROW(std::runtime_error{"NTTP CSS selector attribute operator is unsupported"});
+        LEXBORPP_CONSTEVAL_FAIL(std::runtime_error{"NTTP CSS selector attribute operator is unsupported"});
       }
 
       skip_spaces(input, pos);
       if (pos >= input.size()) {
-        LEXBORPP_THROW(std::runtime_error{"NTTP CSS selector attribute value is missing"});
+        LEXBORPP_CONSTEVAL_FAIL(std::runtime_error{"NTTP CSS selector attribute value is missing"});
       }
 
       auto was_quoted = false;
@@ -722,7 +722,7 @@ constexpr auto parse_simple_selector(
         was_quoted = true;
         auto const quoted = parse_quoted_value(input, pos);
         if (not quoted.has_value()) {
-          LEXBORPP_THROW(std::runtime_error{"NTTP CSS selector attribute value is missing a closing quote"});
+          LEXBORPP_CONSTEVAL_FAIL(std::runtime_error{"NTTP CSS selector attribute value is missing a closing quote"});
         }
         value = *quoted;
       } else {
@@ -731,13 +731,13 @@ constexpr auto parse_simple_selector(
 
       // 空値は引用符付きの場合のみ有効 (`[attr=""]`)。`[attr=]` は不正。
       if (value.empty() && not was_quoted) {
-        LEXBORPP_THROW(std::runtime_error{"NTTP CSS selector attribute value must not be empty"});
+        LEXBORPP_CONSTEVAL_FAIL(std::runtime_error{"NTTP CSS selector attribute value must not be empty"});
       }
       skip_spaces(input, pos);
     }
 
     if (pos >= input.size() || input[pos] != ']') {
-      LEXBORPP_THROW(std::runtime_error{"NTTP CSS selector attribute selector must end with ']'"});
+      LEXBORPP_CONSTEVAL_FAIL(std::runtime_error{"NTTP CSS selector attribute selector must end with ']'"});
     }
     ++pos;
     append(selector_simple_spec{.kind = selector_simple_kind::attribute, .name = name, .value = value, .attribute_match = match});
@@ -745,12 +745,12 @@ constexpr auto parse_simple_selector(
   }
 
   if (input[pos] == ':') {
-    LEXBORPP_THROW(std::runtime_error{"NTTP CSS selector pseudo-classes are not supported yet"});
+    LEXBORPP_CONSTEVAL_FAIL(std::runtime_error{"NTTP CSS selector pseudo-classes are not supported yet"});
   }
 
   auto const value = parse_name(input, pos);
   if (value.empty()) {
-    LEXBORPP_THROW(std::runtime_error{"NTTP CSS selector token is invalid"});
+    LEXBORPP_CONSTEVAL_FAIL(std::runtime_error{"NTTP CSS selector token is invalid"});
   }
   append(selector_simple_spec{.kind = selector_simple_kind::type, .value = value, .tag_id = lookup_tag_id(value)});
 }
@@ -767,7 +767,7 @@ constexpr auto parse_compound_elements(
   std::size_t& pos,
   selector_spec<Max>& result) -> void {
   if (pos >= input.size()) {
-    LEXBORPP_THROW(std::runtime_error{"NTTP CSS selector ended unexpectedly"});
+    LEXBORPP_CONSTEVAL_FAIL(std::runtime_error{"NTTP CSS selector ended unexpectedly"});
   }
 
   parse_simple_selector<Max>(input, pos, result);
@@ -779,7 +779,7 @@ constexpr auto parse_compound_elements(
     }
 
     if (not is_simple_selector_start(input[pos])) {
-      LEXBORPP_THROW(std::runtime_error{"NTTP CSS selector token is invalid"});
+      LEXBORPP_CONSTEVAL_FAIL(std::runtime_error{"NTTP CSS selector token is invalid"});
     }
 
     parse_simple_selector<Max>(input, pos, result);

@@ -2,7 +2,7 @@
  * @file test/smoke_wasi_minimal.cpp
  * @brief LEXBORPP_WASI_MINIMAL モードの検証。
  *
- * -fno-exceptions 付きでビルドされる。LEXBORPP_THROW を使う NTTP パーサを
+ * -fno-exceptions 付きでビルドされる。LEXBORPP_CONSTEVAL_FAIL を使う NTTP パーサを
  * 含む全モジュール (parse/query/DOM 編集/walker/range アダプタ) が
  * 例外なしでコンパイル・実行できることを確認する。
  */

@@ -10,10 +10,6 @@ option(BUILD_BENCH "Build benchmarks" ON)
 option(ENABLE_WASI_MINIMAL "Enable WASI minimal (no exceptions) mode - wasi-sdk wasm32-wasip1 assumed" OFF)
 option(LEXBORPP_NATIVE_ARCH "Build with -march=native / /Ox for maximum speed (not portable across machines)" OFF)
 
-if(ENABLE_WASI_MINIMAL)
-  add_compile_definitions(LEXBORPP_WASI_MINIMAL=1)
-endif()
-
 ## 警告フラグ・最適化は top-level ビルドのときだけ適用する。
 ## add_subdirectory() で取り込む利用者のビルド設定を汚染しないようにするため。
 if(PROJECT_IS_TOP_LEVEL)
@@ -55,14 +51,22 @@ endif()
 
 find_package(lexbor CONFIG QUIET)
 
-# 1. lexbor::lexbor を確保する (vcpkg は lexbor::lexbor_static のみ提供するため補完)
-if(NOT TARGET lexbor::lexbor)
+# 1. リンク先の lexbor ターゲットを解決する。
+#    vcpkg は lexbor::lexbor_static のみエクスポートする。usage requirements
+#    (LEXBOR_STATIC 定義、設定別ライブラリ位置、include 情報) を保持するため、
+#    エクスポート済みターゲットを優先し、見つからない場合だけ自前で生成する。
+if(TARGET lexbor::lexbor_static)
+    set(LEXBORPP_LEXBOR_TARGET lexbor::lexbor_static)
+elseif(TARGET lexbor::lexbor)
+    set(LEXBORPP_LEXBOR_TARGET lexbor::lexbor)
+else()
     find_path(LEXBOR_INCLUDE_DIR NAMES lexbor/html/parser.h REQUIRED)
     find_library(LEXBOR_LIBRARY NAMES lexbor_static lexbor REQUIRED)
 
     add_library(lexbor::lexbor INTERFACE IMPORTED)
     target_include_directories(lexbor::lexbor INTERFACE "${LEXBOR_INCLUDE_DIR}")
     target_link_libraries(lexbor::lexbor INTERFACE "${LEXBOR_LIBRARY}")
+    set(LEXBORPP_LEXBOR_TARGET lexbor::lexbor)
 endif()
 
 # 2. LEXBOR_INCLUDE_DIR を必ず解決する (経路: find_path cache → target property → find_path)
@@ -88,8 +92,14 @@ target_include_directories(lexborpp
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
-target_link_libraries(lexborpp INTERFACE lexbor::lexbor)
+target_link_libraries(lexborpp INTERFACE ${LEXBORPP_LEXBOR_TARGET})
 target_compile_features(lexborpp INTERFACE cxx_std_23)
+
+if(ENABLE_WASI_MINIMAL)
+  # add_compile_definitions ではなく INTERFACE 定義として利用者へ伝搬する
+  # (add_subdirectory / インストール済みパッケージ利用時も定義が有効になる)。
+  target_compile_definitions(lexborpp INTERFACE LEXBORPP_WASI_MINIMAL=1)
+endif()
 
 set(LEXBORPP_INSTALL_CMAKEDIR "${CMAKE_INSTALL_LIBDIR}/cmake/lexborpp")
 

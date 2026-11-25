@@ -7,16 +7,24 @@
 #include "lexbor/html/serialize.h"
 #include "lexbor/dom/dom.h"
 
+#include "lexborpp/config.hpp"
+
 namespace lexborpp {
 namespace detail {
 
 /**
  * @brief HTML シリアライズ結果を文字列へ追記するコールバックです。
+ *
+ * noexcept 境界から例外を漏らさないため、OOM はエラーステータスで報告します。
  */
 inline auto serialize_callback(const lxb_char_t* data, size_t len, void* ctx) noexcept -> lxb_status_t {
   auto* const str = static_cast<std::string*>(ctx);
-  str->append(reinterpret_cast<const char*>(data), len);
-  return LXB_STATUS_OK;
+  return detail::with_bad_alloc_guard(
+    [&] {
+      str->append(reinterpret_cast<const char*>(data), len);
+      return LXB_STATUS_OK;
+    },
+    [] { return LXB_STATUS_ERROR_MEMORY_ALLOCATION; });
 }
 
 } // namespace detail

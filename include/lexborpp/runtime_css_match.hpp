@@ -8,6 +8,7 @@
 
 #include "lexbor/dom/dom.h"
 
+#include "lexborpp/config.hpp"
 #include "lexborpp/core.hpp"
 #include "lexborpp/nttp_parser.hpp"
 #include "lexborpp/runtime_css_parser.hpp"
@@ -124,10 +125,12 @@ template <std::size_t Max>
   return nullptr;
 }
 
+// 注意: 内部で vector を確保するため noexcept にしない。OOM は呼び出し元の
+//       noexcept 境界で std::errc::not_enough_memory に変換される。
 template <std::size_t Max>
 [[nodiscard]] inline auto query_selector_spec_all(
   lxb_dom_node_t const* node,
-  selector_spec<Max> const& spec) noexcept -> std::vector<lxb_dom_node_t*> {
+  selector_spec<Max> const& spec) -> std::vector<lxb_dom_node_t*> {
   auto result = std::vector<lxb_dom_node_t*>{};
   if (node == nullptr) return result;
   result.reserve(16);
@@ -154,7 +157,11 @@ template <std::size_t Max>
   if (node == nullptr || selector.empty()) return std::unexpected(std::errc::invalid_argument);
   auto spec = parse_runtime_selector_auto(selector);
   if (!spec) return std::unexpected(spec.error());
-  return query_selector_spec_all(node, *spec);
+  return detail::with_bad_alloc_guard(
+    [&]() -> std::expected<std::vector<lxb_dom_node_t*>, std::errc> {
+      return query_selector_spec_all(node, *spec);
+    },
+    [] { return std::unexpected(std::errc::not_enough_memory); });
 }
 
 // --- Runtime id prefilter helpers (expanded) ---
@@ -222,7 +229,11 @@ template <std::size_t Max>
     if (match_runtime_selector(found, *spec)) return std::vector<lxb_dom_node_t*>{found};
     return std::vector<lxb_dom_node_t*>{};
   }
-  return query_selector_spec_all(node, *spec);
+  return detail::with_bad_alloc_guard(
+    [&]() -> std::expected<std::vector<lxb_dom_node_t*>, std::errc> {
+      return query_selector_spec_all(node, *spec);
+    },
+    [] { return std::unexpected(std::errc::not_enough_memory); });
 }
 
 }  // namespace detail

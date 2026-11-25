@@ -4,15 +4,26 @@ include(CMakeFindDependencyMacro)
 
 find_dependency(lexbor CONFIG)
 
-if(NOT TARGET lexbor::lexbor)
+# ビルド時と同じ優先順位でリンク先ターゲットを解決する。
+# vcpkg の lexbor::lexbor_static は LEXBOR_STATIC 定義や設定別ライブラリ位置を
+# usage requirements として持つため、それを直接使う (自前生成では失われる)。
+if(TARGET lexbor::lexbor_static)
+    set(LEXBORPP_LEXBOR_TARGET lexbor::lexbor_static)
+elseif(TARGET lexbor::lexbor)
+    set(LEXBORPP_LEXBOR_TARGET lexbor::lexbor)
+else()
     find_path(LEXBOR_INCLUDE_DIR NAMES lexbor/html/parser.h REQUIRED)
     find_library(LEXBOR_LIBRARY NAMES lexbor_static lexbor REQUIRED)
 
-    add_library(lexbor::lexbor UNKNOWN IMPORTED)
-    set_target_properties(lexbor::lexbor PROPERTIES
-        IMPORTED_LOCATION "${LEXBOR_LIBRARY}"
-        INTERFACE_INCLUDE_DIRECTORIES "${LEXBOR_INCLUDE_DIR}"
-    )
+    if(NOT TARGET lexbor::lexbor)
+        add_library(lexbor::lexbor UNKNOWN IMPORTED)
+        set_target_properties(lexbor::lexbor PROPERTIES
+            IMPORTED_LOCATION "${LEXBOR_LIBRARY}"
+            IMPORTED_LINK_INTERFACE_LANGUAGES "C"
+            INTERFACE_INCLUDE_DIRECTORIES "${LEXBOR_INCLUDE_DIR}"
+        )
+    endif()
+    set(LEXBORPP_LEXBOR_TARGET lexbor::lexbor)
 endif()
 
 include("${CMAKE_CURRENT_LIST_DIR}/lexborppTargets.cmake")
