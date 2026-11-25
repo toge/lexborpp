@@ -131,13 +131,9 @@ constexpr auto iequals(std::string_view lhs, std::string_view rhs) noexcept -> b
   return true;
 }
 // Tag id lookup for type selector optimization (case-insensitive) — ponytail: 1 integer compare beats iequals
-constexpr std::array<std::pair<std::string_view, lxb_tag_id_t>, 196> kTagLookup{{
-    {"undef", LXB_TAG__UNDEF},
-    {"end_of_file", LXB_TAG__END_OF_FILE},
-    {"text", LXB_TAG__TEXT},
-    {"document", LXB_TAG__DOCUMENT},
-    {"em_comment", LXB_TAG__EM_COMMENT},
-    {"em_doctype", LXB_TAG__EM_DOCTYPE},
+// 内部 synthetic tag (#text 等) はここに含めない。SVG <text> のような動的登録タグは
+// qualified name 比較へのフォールバックで一致させる。
+constexpr std::array<std::pair<std::string_view, lxb_tag_id_t>, 190> kTagLookup{{
     {"a", LXB_TAG_A},
     {"abbr", LXB_TAG_ABBR},
     {"acronym", LXB_TAG_ACRONYM},

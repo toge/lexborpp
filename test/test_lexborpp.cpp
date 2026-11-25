@@ -1436,6 +1436,29 @@ TEST_CASE("non-element nodes fail safely on element-only operations") {
   }
 }
 
+TEST_CASE("SVG text elements are found by type selectors") {
+  auto fixture = html_document_fixture{R"(<svg><text id="svg-text">hi</text></svg>)"};
+  auto* root = fixture.document_node();
+
+  SECTION("runtime type selector") {
+    auto result = lexborpp::query_selector(root, "text");
+    REQUIRE(result.has_value());
+    REQUIRE(result.value() != nullptr);
+    REQUIRE(lexborpp::get_attr_value(result.value(), "id") == "svg-text");
+
+    auto nested = lexborpp::query_selector(root, "svg text");
+    REQUIRE(nested.has_value());
+    REQUIRE(nested.value() == result.value());
+  }
+
+  SECTION("NTTP type selector") {
+    auto* node = lexborpp::query_selector<"text">(root);
+    REQUIRE(node != nullptr);
+    REQUIRE(lexborpp::get_attr_value(node, "id") == "svg-text");
+    REQUIRE(lexborpp::query_selector<"svg text">(root) == node);
+  }
+}
+
 TEST_CASE("indexed queries match normal scans for every combinator") {
   auto const html = R"HTML(
     <div id="wrap">
