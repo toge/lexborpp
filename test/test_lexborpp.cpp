@@ -15,6 +15,9 @@
 // OOM 変換の回帰テスト用: フラグが立っている間だけグローバル new を失敗させる。
 // 通常の確保は malloc にフォワードするため、フラグが立っていない限り
 // Catch2 自身の動作には影響しない。
+// Emscripten は例外ランタイム (unwind) を持たないため throw すると abort する。
+// OOM 注入はホストのビルドでのみ行う。
+#ifndef __EMSCRIPTEN__
 namespace lexborpp_test {
 inline thread_local bool fail_allocations = false;
 }
@@ -28,6 +31,7 @@ void* operator new(std::size_t count) {
   }
   throw std::bad_alloc{};
 }
+#endif
 
 namespace {
 
@@ -1558,6 +1562,7 @@ TEST_CASE("runtime selector limits are rejected with invalid_argument") {
   }
 }
 
+#ifndef __EMSCRIPTEN__
 TEST_CASE("indexed query_selector_all converts OOM into not_enough_memory") {
   auto fixture = html_document_fixture{R"(<span id="s1">x</span>)"};
   auto* root = fixture.document_node();
@@ -1583,6 +1588,7 @@ TEST_CASE("indexed query_selector_all converts OOM into not_enough_memory") {
     REQUIRE(result.error() == std::errc::not_enough_memory);
   }
 }
+#endif
 
 TEST_CASE("indexed queries match normal scans for every combinator") {
   auto const html = R"HTML(
