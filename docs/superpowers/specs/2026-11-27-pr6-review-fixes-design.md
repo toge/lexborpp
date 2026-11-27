@@ -34,11 +34,16 @@ export 名を `lexborpp::lexbor` とする。`lexborpp::lexborpp` は
 ビルド時に見つかった外部 Lexbor target 名ではなく、この wrapper だけに依存する。
 
 build tree では wrapper を解決済みの
-`lexbor::lexbor_static`、`lexbor::lexbor`、raw library の順に配線する。install
-consumer では package config が利用者側の依存関係を解決した後に
-`lexborpp::lexbor` の `INTERFACE_*` properties を再設定する。export file に
-ビルド環境固有の Lexbor target 名が残っていても、consumer での生成前に安定 target
-へ差し替えられる。
+`lexbor::lexbor_static`、`lexbor::lexbor`、raw library の順に配線する。ただし
+install interface では外部 Lexbor target 名や raw path を空にし、
+`$<BUILD_INTERFACE:...>` だけに閉じ込める。export file は
+`lexborpp::lexborpp -> lexborpp::lexbor` という安定した内部参照のみを含む。
+
+install consumer では package config が利用者側の依存関係を先に解決し、export
+target を読み込んだ後に `lexborpp::lexbor` の `INTERFACE_LINK_LIBRARIES` /
+`INTERFACE_INCLUDE_DIRECTORIES` / `INTERFACE_COMPILE_DEFINITIONS` を再設定する。
+`lexborppTargets.cmake` に `lexbor::lexbor_static`、`lexbor::lexbor`、ビルド
+マシンの絶対 header / library path が出力されないことを回帰テストで確認する。
 
 ### 3. raw dependency fallback を package config から到達可能にする
 
@@ -47,9 +52,14 @@ package config では `find_package(lexbor CONFIG QUIET)` を使い、target が
 package config が即終了する構成は使わない。どちらの経路でも解決できなければ
 `lexborpp_FOUND=FALSE` と理由を設定して return する。
 
-raw lookup は `lexbor_static` を先に探し、見つからない場合だけ `lexbor` を探す。
-これにより選択したライブラリの linkage を判定できる。header / library のみの
-top-level build と installed package consumer の双方で同じ規則を使う。
+raw lookup は明示的な `lexbor_static` を先に探し、見つからない場合だけ
+generic な `lexbor` を探す。ライブラリ basename だけでは `lexbor.lib` のように
+static library と shared import library を判別できないため、raw linkage は
+`LEXBORPP_RAW_LEXBOR_LINKAGE=AUTO|STATIC|SHARED` の cache variable でも制御する。
+`AUTO` では `lexbor_static` が選ばれた場合だけ static と判定し、generic な
+`lexbor` は shared とみなす。generic な名前の static library を使う利用者は
+`STATIC` を明示する。header / library のみの top-level build と installed
+package consumer の双方で同じ規則を使う。
 
 ### 4. raw 静的 Lexbor に `LEXBOR_STATIC` を伝搬する
 
@@ -57,7 +67,9 @@ top-level build と installed package consumer の双方で同じ規則を使う
 `INTERFACE_COMPILE_DEFINITIONS` に `LEXBOR_STATIC` を設定する。consumer 側から
 raw target を再配線する場合も同じ定義を設定し、MSVC で
 `LXB_API == __declspec(dllimport)` になることを防ぐ。raw 共有ライブラリ経路では
-この定義を付けない。
+この定義を付けない。generic `lexbor` を `LEXBORPP_RAW_LEXBOR_LINKAGE=STATIC`
+で使う場合も、static と明示されたので `LEXBOR_STATIC` を設定する。linkage の自動判定
+を曖昧な名前に基づいて行わない。
 
 ### 5. `build.sh` の triplet と VCPKG_ROOT を明示する
 
@@ -84,11 +96,28 @@ triplet は環境変数または既定値 `x64-linux-static` を取り、CMake c
    - vcpkg の `lexbor::lexbor_static`
    - `lexbor::lexbor` のみを提供する Lexbor package config
    - package config なしの raw header + static library
-4. raw static compile command に `LEXBOR_STATIC` が含まれることを確認する。
+4. raw static consumer を実際にコンパイルし、ソース中の
+   `#ifndef LEXBOR_STATIC #error ... #endif` が通ることを確認する。Visual Studio
+   generator でも compile_commands.json の有無に依存しない。
 5. `./build.sh static` 後の `CMakeCache.txt` が
    `VCPKG_TARGET_TRIPLET=x64-linux-static` になり、呼び出し側の `VCPKG_ROOT`
    override が維持されることを確認する。
-6. 既存の build、CTest 3 target、WASI / Emscripten CI、MSVC CI を回す。
+6. `add_subdirectory()` consumer、raw 共有 library consumer、依存が完全に存在しない
+   consumer を CTest に追加し、それぞれリンク成功 / configure 失敗理由を確認する。
+7. 重複 ID の先頭候補が scope 外、先頭候補が追加 simple selector を満たさない、
+   後続候補が満たす、複数候補を all で返す各ケースを runtime / NTTP で確認する。
+8. 既存の build、CTest 3 target、WASI / Emscripten CI、MSVC CI を回す。
+
+## ドキュメント
+
+実装時に README と AGENTS.md を更新し、以下を明記する。
+
+- indexed query は重複 ID キーで fast path を使わず、通常走査と同じ結果にする。
+- `document_id_index::find()` のみ先頭ノードを返す first-wins 契約を維持する。
+- `is_ambiguous(id)` の追加と、`rebuild()` による再構築が必要なケースを記載する。
+- installed package は config package だけでなく raw header / library fallback を使える。
+- raw static の linkage が名前から曖昧な場合は
+  `LEXBORPP_RAW_LEXBOR_LINKAGE=STATIC` を利用する。
 
 ## 成功条件
 
