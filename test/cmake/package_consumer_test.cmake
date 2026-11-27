@@ -21,6 +21,21 @@ set(work_dir "${LEXBORPP_BINARY_DIR}/package_consumer_matrix")
 file(REMOVE_RECURSE "${work_dir}")
 file(MAKE_DIRECTORY "${work_dir}")
 
+execute_process(
+  COMMAND "${CMAKE_COMMAND}"
+    "-DLEXBORPP_SOURCE_DIR=${LEXBORPP_SOURCE_DIR}"
+    "-DLEXBORPP_RESOLVER_POLICY_TEST_DIR=${work_dir}/resolver-policy"
+    -P
+    "${LEXBORPP_SOURCE_DIR}/test/cmake/lexborpp_resolver_policy_test.cmake"
+  RESULT_VARIABLE resolver_policy_result
+  OUTPUT_VARIABLE resolver_policy_output
+  ERROR_VARIABLE resolver_policy_error)
+if(NOT resolver_policy_result EQUAL 0)
+  message(FATAL_ERROR
+    "resolver policy test failed (${resolver_policy_result}):\n"
+    "${resolver_policy_output}\n${resolver_policy_error}")
+endif()
+
 function(lexborpp_generator_args result)
   set(args -G "${LEXBORPP_GENERATOR}")
   if(LEXBORPP_GENERATOR_INSTANCE)
@@ -262,6 +277,7 @@ set(fake_static_explicit_prefix "${work_dir}/fake-static-explicit")
 set(fake_generic_combined_prefix "${work_dir}/fake-generic-combined")
 set(fake_static_only_prefix "${work_dir}/fake-static-only")
 set(fake_shared_only_prefix "${work_dir}/fake-shared-only")
+set(fake_shared_plain_prefix "${work_dir}/fake-shared-plain")
 
 function(lexborpp_build_fake kind prefix label)
   set(binary "${work_dir}/build-${label}")
@@ -287,6 +303,11 @@ lexborpp_build_fake(
   STATIC_GENERIC "${fake_static_only_prefix}" "fake-static-only")
 lexborpp_build_fake(
   SHARED_GENERIC "${fake_shared_only_prefix}" "fake-shared-only")
+if(WIN32)
+  lexborpp_build_fake(
+    SHARED_PLAIN_GENERIC "${fake_shared_plain_prefix}"
+    "fake-shared-plain")
+endif()
 
 file(GLOB fake_generic_static_libraries
   "${fake_generic_combined_prefix}/lib/*lexbor${LEXBORPP_STATIC_LIBRARY_SUFFIX}")
@@ -360,6 +381,7 @@ lexborpp_configure_build_test(
 
 if(LEXBORPP_SYSTEM_NAME STREQUAL "Windows")
   set(raw_shared_runtime_dir "${fake_generic_combined_prefix}/bin")
+  set(raw_shared_plain_runtime_dir "${fake_shared_plain_prefix}/bin")
 else()
   set(raw_shared_runtime_dir "${fake_generic_combined_prefix}/lib")
 endif()
@@ -411,6 +433,12 @@ lexborpp_raw_consumer_args(
   "${fake_shared_only_prefix}"
   raw_shared_only_args)
 
+set(raw_expected_runtime_args)
+if(WIN32)
+  list(APPEND raw_expected_runtime_args
+    "-DLEXBORPP_EXPECT_RESOLVED_RUNTIME_LIBRARY_SUFFIX=${LEXBORPP_SHARED_LIBRARY_SUFFIX}")
+endif()
+
 lexborpp_configure_build_test(
   "${consumer_source}" "${work_dir}/consumer-raw-generic-shared"
   "raw generic SHARED consumer"
@@ -418,7 +446,8 @@ lexborpp_configure_build_test(
   "-DLEXBORPP_RAW_LEXBOR_LINKAGE=SHARED"
   "-DLEXBORPP_EXPECT_LINKAGE=SHARED"
   "-DLEXBORPP_FAKE_LEXBOR_RUNTIME_DIR=${raw_shared_runtime_dir}"
-  "-DLEXBORPP_EXPECT_RESOLVED_LIBRARY_SUFFIX=${LEXBORPP_SHARED_LINKER_SUFFIX_FOR_TEST}")
+  "-DLEXBORPP_EXPECT_RESOLVED_LIBRARY_SUFFIX=${LEXBORPP_SHARED_LINKER_SUFFIX_FOR_TEST}"
+  ${raw_expected_runtime_args})
 
 lexborpp_configure_build_test(
   "${consumer_source}" "${work_dir}/consumer-raw-generic-auto-shared"
@@ -427,7 +456,8 @@ lexborpp_configure_build_test(
   "-DLEXBORPP_RAW_LEXBOR_LINKAGE=AUTO"
   "-DLEXBORPP_EXPECT_LINKAGE=SHARED"
   "-DLEXBORPP_FAKE_LEXBOR_RUNTIME_DIR=${raw_shared_runtime_dir}"
-  "-DLEXBORPP_EXPECT_RESOLVED_LIBRARY_SUFFIX=${LEXBORPP_SHARED_LINKER_SUFFIX_FOR_TEST}")
+  "-DLEXBORPP_EXPECT_RESOLVED_LIBRARY_SUFFIX=${LEXBORPP_SHARED_LINKER_SUFFIX_FOR_TEST}"
+  ${raw_expected_runtime_args})
 
 lexborpp_require_configure_failure(
   "${consumer_source}" "${work_dir}/consumer-invalid-linkage"
@@ -449,14 +479,42 @@ lexborpp_require_configure_failure(
   ${raw_shared_only_args}
   "-DLEXBORPP_RAW_LEXBOR_LINKAGE=STATIC")
 
-if(NOT LEXBORPP_SYSTEM_NAME STREQUAL "Windows")
-  lexborpp_require_configure_failure(
-    "${consumer_source}" "${work_dir}/consumer-shared-only-static-artifact"
-    "SHARED with only static generic artifact"
-    "Lexbor.*shared|library.*lexbor"
-    ${raw_static_only_args}
-    "-DLEXBORPP_RAW_LEXBOR_LINKAGE=SHARED")
+if(WIN32)
+  set(static_only_shared_mismatch
+    "ambiguous.*without matching runtime library")
+else()
+  set(static_only_shared_mismatch
+    "Lexbor.*shared|library.*lexbor")
 endif()
+
+lexborpp_require_configure_failure(
+  "${consumer_source}" "${work_dir}/consumer-shared-only-static-artifact"
+  "SHARED with only static generic artifact"
+  "${static_only_shared_mismatch}"
+  ${raw_static_only_args}
+  "-DLEXBORPP_RAW_LEXBOR_LINKAGE=SHARED")
+
+if(WIN32)
+  lexborpp_raw_consumer_args(
+    "${fake_shared_plain_prefix}" raw_shared_plain_args)
+  lexborpp_configure_build_test(
+    "${consumer_source}" "${work_dir}/consumer-raw-generic-shared-plain"
+    "raw generic SHARED consumer with plain import library"
+    ${raw_shared_plain_args}
+    "-DLEXBORPP_RAW_LEXBOR_LINKAGE=SHARED"
+    "-DLEXBORPP_EXPECT_LINKAGE=SHARED"
+    "-DLEXBORPP_FAKE_LEXBOR_RUNTIME_DIR=${raw_shared_plain_runtime_dir}"
+    "-DLEXBORPP_EXPECT_RESOLVED_LIBRARY_SUFFIX=${LEXBORPP_IMPORT_LIBRARY_SUFFIX}"
+    "-DLEXBORPP_EXPECT_RESOLVED_RUNTIME_LIBRARY_SUFFIX=${LEXBORPP_SHARED_LIBRARY_SUFFIX}")
+endif()
+
+lexborpp_require_configure_failure(
+  "${consumer_source}"
+  "${work_dir}/consumer-auto-only-static-artifact"
+  "AUTO with only static generic artifact"
+  "${static_only_shared_mismatch}"
+  ${raw_static_only_args}
+  "-DLEXBORPP_RAW_LEXBOR_LINKAGE=AUTO")
 
 lexborpp_require_configure_failure(
   "${consumer_source}" "${work_dir}/consumer-missing"

@@ -93,9 +93,10 @@ cmake --build build --parallel
 呼び出し側の値を優先し、未指定時は `~/vm/vcpkg`。`VCPKG_TARGET_TRIPLET` も
 呼び出し側の値を優先し、未指定時の `x64-linux-static` を
 `-DVCPKG_TARGET_TRIPLET=...` として明示的に CMake cache へ渡します。
-`VCPKG_OVERLAY_PORTS` に既定値は追加せず、呼び出し側から指定された場合だけ
-使用します。`./build.sh static` は出力先を `build_static/` に変えるだけで、
-triplet 自体は上書きしません。
+`VCPKG_OVERLAY_PORTS` に既定値は追加しません。呼び出し側の値は
+`-DVCPKG_OVERLAY_PORTS=...` として明示的に渡し、未指定時は空文字も渡して
+既存 CMake cache の古い値を消去します。`./build.sh static` は出力先を
+`build_static/` に変えるだけで、triplet 自体は上書きしません。
 
 既存の build tree に前回と異なる vcpkg toolchain が記録されている場合、
 スクリプトは configure を開始せず停止します。`VCPKG_ROOT` を変更するときは、
@@ -146,6 +147,15 @@ static library だと分かっているのに名前が generic の場合は、�
 `STATIC` / `SHARED` だけです。大小文字違いなどの不正値や、指定した linkage
 に対応する header / library が不足する組み合わせは configure を失敗させます。
 raw static では `LEXBOR_STATIC` が利用者へ伝搬されます。
+
+Windows の raw `SHARED` / generic `AUTO` では、`.dll.lib` と `.dll.a` を優先して
+探索します。これらの明示的な import-library 名を使わない plain `.lib` /
+`.a` は、対応する basename の DLL が library directory または
+隣接 / prefix の `bin` にある場合だけ shared と認定します。runtime が見つからない
+plain `.lib` は「static 専用か shared import library か曖昧」として configure
+で失敗します。自動探索できない layout では
+`LEXBORPP_RAW_LEXBOR_RUNTIME_LIBRARY` に DLL の path を指定できます。
+`STATIC` mode の `.lib` / `.a` は従来どおり static library として扱います。
 
 ## 使用例
 
