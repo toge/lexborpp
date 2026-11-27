@@ -89,6 +89,18 @@ cmake -B build \
 cmake --build build --parallel
 ```
 
+リポジトリ付属の `build.sh` でも同じ vcpkg 設定を使えます。`VCPKG_ROOT` は
+呼び出し側の値を優先し、未指定時は `~/vm/vcpkg`。`VCPKG_TARGET_TRIPLET` も
+呼び出し側の値を優先し、未指定時の `x64-linux-static` を
+`-DVCPKG_TARGET_TRIPLET=...` として明示的に CMake cache へ渡します。
+`VCPKG_OVERLAY_PORTS` に既定値は追加せず、呼び出し側から指定された場合だけ
+使用します。`./build.sh static` は出力先を `build_static/` に変えるだけで、
+triplet 自体は上書きしません。
+
+既存の build tree に前回と異なる vcpkg toolchain が記録されている場合、
+スクリプトは configure を開始せず停止します。`VCPKG_ROOT` を変更するときは、
+該当 build directory を clean にするか、新しい build directory を使ってください。
+
 ### 3. インストールして `find_package` で使う
 
 このプロジェクトは CMake package config をインストールできます。
@@ -108,7 +120,32 @@ target_link_libraries(your_target
 )
 ```
 
-`lexborpp` の package config は内部で `find_dependency(lexbor CONFIG)` を呼び出します。Lexbor をインストールしていない環境で `find_package(lexborpp CONFIG REQUIRED)` を実行すると `lexbor` が見つからない旨のエラーで失敗しますので、vcpkg / Conan / システムパッケージのいずれかで先に Lexbor を導入してください。`find_package` を `QUIET` なしで呼ぶこの挙動は意図的なものです。
+利用側で `find_package(lexborpp CONFIG REQUIRED)` を実行したとき、package config
+は Lexbor をその場で解決します。`lexbor::lexbor_static`、
+`lexbor::lexbor` の config target と、header / library を直接探索する
+raw fallback に対応しています。どちらも見つからない場合や、指定した linkage
+で必要な library を見つけられない場合は configure で失敗します。
+
+インストール済み export は、外部 Lexbor target 名やビルドマシン固有の path
+ではなく、このライブラリ所有の安定した `lexborpp::lexbor` wrapper だけを参照
+します。package config が利用側の Lexbor を解決した後にこの wrapper へ配線する
+ため、`lexborpp::lexborpp` を同じ形で利用できます。
+
+raw fallback の選択規則は `LEXBORPP_RAW_LEXBOR_LINKAGE` で固定できます。
+未指定時の既定値は `AUTO` です。
+
+| 値 | 探索する raw library | 動作 |
+| --- | --- | --- |
+| `AUTO` | `lexbor_static`、なければ generic `lexbor` | `lexbor_static` は static、generic `lexbor` は shared 扱い |
+| `STATIC` | `lexbor_static`、なければ generic `lexbor` | どちらも static 扱いにして `LEXBOR_STATIC` を伝搬 |
+| `SHARED` | generic `lexbor` のみ | shared 扱い。`lexbor_static` だけでは失敗 |
+
+`AUTO` では basename だけでは判別できない generic `lexbor` を shared とみなします。
+static library だと分かっているのに名前が generic の場合は、明示的に
+`STATIC` を指定してください。同様に、許可される値は大文字の `AUTO` /
+`STATIC` / `SHARED` だけです。大小文字違いなどの不正値や、指定した linkage
+に対応する header / library が不足する組み合わせは configure を失敗させます。
+raw static では `LEXBOR_STATIC` が利用者へ伝搬されます。
 
 ## 使用例
 
@@ -239,14 +276,30 @@ auto dump_ready_items(lxb_dom_node_t* root) -> void {
 | `query_selector_all<"...">(node)` | NTTP で渡した CSS selector に一致する全要素を返す |
 | `document_id_index(root)` | 指定ルート配下の `id` 属性ノードをハッシュテーブルに保持する |
 | `index.find(id)` / `index.contains(id)` | インデックス経由で `id` からノードを `O(1)` 検索する |
+| `index.size()` | 重複を除いた `id` 値の数を返す |
+| `index.is_ambiguous(id)` | その `id` がスナップショット内で重複しているか判定する |
+| `index.covers_scope(scope)` | インデックスの root が `scope` 自身またはその祖先であるか判定する |
 | `query_selector(node, selector, index)` | 実行時 selector + インデックスでルート参照を改善した最初の要素を返す |
 | `query_selector_all(node, selector, index)` | 実行時 selector + インデックスでルート参照を改善した全要素を返す |
 | `query_selector<"...">(node, index)` | NTTP selector + インデックスでルート参照を改善した最初の要素を返す |
 | `query_selector_all<"...">(node, index)` | NTTP selector + インデックスでルート参照を改善した全要素を返す |
 
-> **インデックス利用の前提**: セレクタの右端 compound に `id` simple selector が含まれる場合のみインデックスを参照します。それ以外は通常の DOM ツリー走査にフォールバックします。インデックス付き検索と通常検索は、すべての combinator で同じ結果になります。
+> **インデックス利用の前提**: セレクタの右端 compound に `id` simple
+> selector が含まれる場合だけ単一ノードの fast path を使います。その `id`
+> が重複して `index.is_ambiguous(id)` となる場合、またはインデックスの root
+> が検索範囲全体を覆わず `index.covers_scope(node)` が false の場合は通常の
+> DOM ツリー走査へフォールバックします。runtime / NTTP ともに、indexed
+> query の first / all 結果は通常検索と一致します。
 >
-> **スナップショットであることに注意**: `document_id_index` は構築時点の `id` マップです。DOM を編集（id の変更・ノードの削除）した後は自動追従しません。編集後に検索する場合は `rebuild()` で作り直してください。また、文書内で `id` が重複している場合、最初に見つかったノードのみが登録されます。
+> **重複 ID の契約**: `document_id_index` は `id` ごとに最初に見つかった
+> ノードを登録します。重複があっても `find(id)` はその最初のノードを返し、
+> `size()` は出現回数ではなく一意な `id` 値の数です。重複情報は
+> `is_ambiguous(id)` で確認できます。
+>
+> **スナップショットであることに注意**: `document_id_index` は構築時点の
+> `id` マップと root を保持します。DOM を編集（id の変更・ノードの削除）した
+> 後は自動追従しません。編集後や別の root 範囲を使いたい場合は `rebuild()`
+> で作り直してください。
 
 ### 属性・テキスト・シリアライズ
 
@@ -328,7 +381,7 @@ ctest --test-dir build -V
 - `query_selector()` / `query_selector_all()` と `query_selector<"...">()` / `query_selector_all<"...">()` は、いずれも**開始ノード自身を探索対象に含みます**（root 参加挙動を統一しています）
 - `query_selector<"...">()` / `query_selector_all<"...">()` はコンパイル時解析済みの selector を使います。未対応構文はコンパイルエラーになります
 - walker / range アダプタは Lexbor の生ポインタをそのまま返すため、元の `lxb_html_document_t` の寿命内でだけ使ってください
-- インデックス付き query (`query_selector(node, selector, index)` 等) は id の一意性を前提とします。文書内で id が重複している場合、インデックスには最初の 1 ノードのみ登録されるため、スコープ検索では素の走査と結果が異なることがあります
+- インデックス付き query (`query_selector(node, selector, index)` 等) は、`id` が重複している場合や index root が query scope を覆わない場合に通常走査へフォールバックします。このため、通常検索との first / all 結果は一致します
 
 ## 収録ファイル
 
