@@ -21,10 +21,15 @@ target_include_directories(${fake_target} PUBLIC
 if(FAKE_LEXBOR_KIND STREQUAL "SHARED_GENERIC")
   target_compile_definitions(${fake_target}
     PRIVATE FAKE_LEXBOR_BUILDING_SHARED=1)
+  if(WIN32)
+    set_target_properties(${fake_target} PROPERTIES
+      RUNTIME_OUTPUT_NAME lexbor
+      ARCHIVE_OUTPUT_NAME lexbor.dll)
+  endif()
 endif()
 
 install(TARGETS ${fake_target}
   RUNTIME DESTINATION bin
   LIBRARY DESTINATION lib
   ARCHIVE DESTINATION lib)
-install(FILES fake.h DESTINATION include)
+install(FILES fake.h DESTINATION probe/include)
