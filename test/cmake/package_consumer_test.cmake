@@ -9,6 +9,7 @@ set(required_variables
   LEXBORPP_GENERATOR
   LEXBORPP_C_COMPILER
   LEXBORPP_CXX_COMPILER
+  LEXBORPP_CXX_COMPILER_ID
   LEXBORPP_SHARED_LINKER_SUFFIX_FOR_TEST
   LEXBORPP_CTEST_COMMAND)
 foreach(variable IN LISTS required_variables)
@@ -423,6 +424,26 @@ lexborpp_configure_build_test(
   "-DLEXBORPP_LINK_PROBE=ON"
   "-DLEXBORPP_EXPECT_INTERFACE_ONLY=ON")
 
+if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.28")
+  set(module_scan_args "-DLEXBORPP_EXPECT_NO_MODULE_SCAN=ON")
+  if(LEXBORPP_CXX_COMPILER_ID MATCHES "Clang")
+    list(APPEND module_scan_args
+      "-DLEXBORPP_FORCE_MISSING_CLANG_SCAN_DEPS=ON")
+  endif()
+  lexborpp_configure_build_test(
+    "${consumer_source}" "${work_dir}/consumer-missing-module-scanner"
+    "non-module consumer with unavailable dependency scanner"
+    "-Dlexborpp_DIR=${lexborpp_config_dir}"
+    "-Dlexbor_DIR=${fake_config_dir}"
+    "-DLEXBORPP_FAKE_LEXBOR_INCLUDE_DIR=${LEXBORPP_LEXBOR_INCLUDE_DIR}"
+    "-DLEXBORPP_FAKE_LEXBOR_LIBRARY=${fake_generic_static_library}"
+    "-DLEXBORPP_FAKE_LEXBOR_COMPILE_DEFINITIONS=LEXBOR_STATIC"
+    "-DLEXBORPP_FAKE_LEXBOR_PROBE_INCLUDE_DIR=${fake_generic_combined_prefix}/probe/include"
+    "-DLEXBORPP_EXPECT_LINKAGE=STATIC"
+    "-DLEXBORPP_LINK_PROBE=ON"
+    ${module_scan_args})
+endif()
+
 lexborpp_configure_build_test(
   "${consumer_source}" "${work_dir}/consumer-fake-shared-config"
   "installed fake shared-target config consumer"
@@ -588,6 +609,16 @@ add_subdirectory("@LEXBORPP_SOURCE_DIR@" third_party/lexborpp)
 
 add_executable(consumer "@LEXBORPP_SOURCE_DIR@/test/package_consumer/main.cpp")
 target_link_libraries(consumer PRIVATE lexborpp::lexborpp)
+if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.28")
+  set_target_properties(consumer PROPERTIES CXX_SCAN_FOR_MODULES OFF)
+  get_target_property(consumer_scan_for_modules
+    consumer CXX_SCAN_FOR_MODULES)
+  if(NOT consumer_scan_for_modules STREQUAL "OFF")
+    message(FATAL_ERROR
+      "add_subdirectory consumer must set CXX_SCAN_FOR_MODULES=OFF, got "
+      "'${consumer_scan_for_modules}'")
+  endif()
+endif()
 if(LEXBORPP_EXPECT_LINKAGE STREQUAL "STATIC")
   target_compile_definitions(consumer PRIVATE LEXBORPP_EXPECT_STATIC=1)
 elseif(LEXBORPP_EXPECT_LINKAGE STREQUAL "SHARED")
