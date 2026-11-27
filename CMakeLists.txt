@@ -49,39 +49,42 @@ else()
     set(LEXBORPP_CXX_STD cxx_std_23)
 endif()
 
-find_package(lexbor CONFIG QUIET)
-
-# 1. リンク先の lexbor ターゲットを解決する。
-#    vcpkg は lexbor::lexbor_static のみエクスポートする。usage requirements
-#    (LEXBOR_STATIC 定義、設定別ライブラリ位置、include 情報) を保持するため、
-#    エクスポート済みターゲットを優先し、見つからない場合だけ自前で生成する。
-if(TARGET lexbor::lexbor_static)
-    set(LEXBORPP_LEXBOR_TARGET lexbor::lexbor_static)
-elseif(TARGET lexbor::lexbor)
-    set(LEXBORPP_LEXBOR_TARGET lexbor::lexbor)
-else()
-    find_path(LEXBOR_INCLUDE_DIR NAMES lexbor/html/parser.h REQUIRED)
-    find_library(LEXBOR_LIBRARY NAMES lexbor_static lexbor REQUIRED)
-
-    add_library(lexbor::lexbor INTERFACE IMPORTED)
-    target_include_directories(lexbor::lexbor INTERFACE "${LEXBOR_INCLUDE_DIR}")
-    target_link_libraries(lexbor::lexbor INTERFACE "${LEXBOR_LIBRARY}")
-    set(LEXBORPP_LEXBOR_TARGET lexbor::lexbor)
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/lexborppResolveLexbor.cmake")
+lexborpp_resolve_lexbor_dependency(LEXBORPP_RESOLVED)
+if(NOT LEXBORPP_RESOLVED_FOUND)
+    message(FATAL_ERROR "${LEXBORPP_RESOLVED_NOT_FOUND_MESSAGE}")
 endif()
 
-# 2. LEXBOR_INCLUDE_DIR を必ず解決する (経路: find_path cache → target property → find_path)
-#    VS generator では INTERFACE 伝搬が効かないことがあるため、各実ターゲットに
-#    直接追加するために LEXBOR_INCLUDE_DIR が必要。
 if(NOT LEXBOR_INCLUDE_DIR)
-    if(TARGET lexbor::lexbor)
-        get_target_property(_lexbor_inc_tmp lexbor::lexbor INTERFACE_INCLUDE_DIRECTORIES)
-        if(_lexbor_inc_tmp AND NOT _lexbor_inc_tmp STREQUAL "_lexbor_inc_tmp-NOTFOUND")
+    if(LEXBORPP_RESOLVED_INCLUDE_DIRS)
+        set(LEXBOR_INCLUDE_DIR "${LEXBORPP_RESOLVED_INCLUDE_DIRS}")
+    elseif(TARGET "${LEXBORPP_RESOLVED_LINK_ITEM}")
+        get_target_property(_lexbor_inc_tmp
+            "${LEXBORPP_RESOLVED_LINK_ITEM}" INTERFACE_INCLUDE_DIRECTORIES)
+        if(_lexbor_inc_tmp AND
+           NOT _lexbor_inc_tmp STREQUAL "_lexbor_inc_tmp-NOTFOUND")
             set(LEXBOR_INCLUDE_DIR "${_lexbor_inc_tmp}")
         endif()
     endif()
     if(NOT LEXBOR_INCLUDE_DIR)
         find_path(LEXBOR_INCLUDE_DIR NAMES lexbor/html/parser.h)
     endif()
+endif()
+
+add_library(lexborpp_lexbor INTERFACE)
+add_library(lexborpp::lexbor ALIAS lexborpp_lexbor)
+set_target_properties(lexborpp_lexbor PROPERTIES EXPORT_NAME lexbor)
+if(LEXBORPP_RESOLVED_LINK_ITEM)
+    target_link_libraries(lexborpp_lexbor INTERFACE
+        "$<BUILD_INTERFACE:${LEXBORPP_RESOLVED_LINK_ITEM}>")
+endif()
+if(LEXBORPP_RESOLVED_INCLUDE_DIRS)
+    target_include_directories(lexborpp_lexbor INTERFACE
+        "$<BUILD_INTERFACE:${LEXBORPP_RESOLVED_INCLUDE_DIRS}>")
+endif()
+if(LEXBORPP_RESOLVED_COMPILE_DEFINITIONS)
+    target_compile_definitions(lexborpp_lexbor INTERFACE
+        "$<BUILD_INTERFACE:${LEXBORPP_RESOLVED_COMPILE_DEFINITIONS}>")
 endif()
 
 add_library(lexborpp INTERFACE)
@@ -92,7 +95,7 @@ target_include_directories(lexborpp
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
-target_link_libraries(lexborpp INTERFACE ${LEXBORPP_LEXBOR_TARGET})
+target_link_libraries(lexborpp INTERFACE lexborpp_lexbor)
 target_compile_features(lexborpp INTERFACE cxx_std_23)
 
 if(ENABLE_WASI_MINIMAL)
@@ -103,7 +106,7 @@ endif()
 
 set(LEXBORPP_INSTALL_CMAKEDIR "${CMAKE_INSTALL_LIBDIR}/cmake/lexborpp")
 
-install(TARGETS lexborpp EXPORT lexborppTargets)
+install(TARGETS lexborpp lexborpp_lexbor EXPORT lexborppTargets)
 install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/include/lexborpp.hpp"
         DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/include/lexborpp"
@@ -129,6 +132,7 @@ write_basic_package_version_file(
 install(FILES
             "${CMAKE_CURRENT_BINARY_DIR}/lexborppConfig.cmake"
             "${CMAKE_CURRENT_BINARY_DIR}/lexborppConfigVersion.cmake"
+            "${CMAKE_CURRENT_SOURCE_DIR}/cmake/lexborppResolveLexbor.cmake"
         DESTINATION ${LEXBORPP_INSTALL_CMAKEDIR})
 
 # テストとベンチは top-level のときだけビルドする。
