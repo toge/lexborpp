@@ -188,6 +188,37 @@ function(lexborpp_configure_build_test source binary label)
   lexborpp_run_ctest("${binary}" "${label}")
 endfunction()
 
+function(lexborpp_configure_ninja_without_module_scan
+    source binary label)
+  lexborpp_require_configure("${source}" "${binary}" "${label}" ${ARGN})
+  set(rules_ninja "${binary}/CMakeFiles/rules.ninja")
+  if(NOT EXISTS "${rules_ninja}")
+    message(FATAL_ERROR
+      "${label} did not generate ${rules_ninja}")
+  endif()
+  file(READ "${rules_ninja}" ninja_rules)
+  if(ninja_rules MATCHES "[Cc]lang-scan-deps(-[0-9]+)?")
+    message(FATAL_ERROR
+      "${label} generated an active Clang scanner name:\n${ninja_rules}")
+  endif()
+  set(build_ninja "${binary}/build.ninja")
+  file(READ "${build_ninja}" ninja_build)
+  if(NOT ninja_build MATCHES
+      "CXX_COMPILER__consumer_unscanned_[^ ]+.*main\\.cpp")
+    message(FATAL_ERROR
+      "${label} did not select the unscanned consumer object rule:\n"
+      "${ninja_build}")
+  endif()
+  if(ninja_build MATCHES
+      "CXX_SCAN__consumer|does-not-exist-module-scan-tool")
+    message(FATAL_ERROR
+      "${label} actively references the unavailable module scanner:\n"
+      "${ninja_build}")
+  endif()
+  lexborpp_run_build("${binary}" "${label}")
+  lexborpp_run_ctest("${binary}" "${label}")
+endfunction()
+
 set(install_prefix "${work_dir}/install")
 lexborpp_run_install(
   "${LEXBORPP_BINARY_DIR}" "${install_prefix}" "lexborpp")
@@ -424,13 +455,12 @@ lexborpp_configure_build_test(
   "-DLEXBORPP_LINK_PROBE=ON"
   "-DLEXBORPP_EXPECT_INTERFACE_ONLY=ON")
 
-if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.28")
-  set(module_scan_args "-DLEXBORPP_EXPECT_NO_MODULE_SCAN=ON")
-  if(LEXBORPP_CXX_COMPILER_ID MATCHES "Clang")
-    list(APPEND module_scan_args
-      "-DLEXBORPP_FORCE_MISSING_CLANG_SCAN_DEPS=ON")
-  endif()
-  lexborpp_configure_build_test(
+if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.28" AND
+    LEXBORPP_CXX_COMPILER_ID MATCHES "Clang" AND
+    LEXBORPP_GENERATOR MATCHES "Ninja")
+  set(missing_clang_scan_deps
+    "${work_dir}/does-not-exist-module-scan-tool")
+  lexborpp_configure_ninja_without_module_scan(
     "${consumer_source}" "${work_dir}/consumer-missing-module-scanner"
     "non-module consumer with unavailable dependency scanner"
     "-Dlexborpp_DIR=${lexborpp_config_dir}"
@@ -441,7 +471,8 @@ if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.28")
     "-DLEXBORPP_FAKE_LEXBOR_PROBE_INCLUDE_DIR=${fake_generic_combined_prefix}/probe/include"
     "-DLEXBORPP_EXPECT_LINKAGE=STATIC"
     "-DLEXBORPP_LINK_PROBE=ON"
-    ${module_scan_args})
+    "-DLEXBORPP_EXPECT_NO_MODULE_SCAN=ON"
+    "-DCMAKE_CXX_COMPILER_CLANG_SCAN_DEPS=${missing_clang_scan_deps}")
 endif()
 
 lexborpp_configure_build_test(

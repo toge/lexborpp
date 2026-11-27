@@ -3,16 +3,6 @@ project(lexborpp_consumer LANGUAGES CXX)
 
 find_package(lexborpp CONFIG REQUIRED)
 
-if(LEXBORPP_FORCE_MISSING_CLANG_SCAN_DEPS)
-  if(NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-    message(FATAL_ERROR
-      "LEXBORPP_FORCE_MISSING_CLANG_SCAN_DEPS requires a Clang compiler")
-  endif()
-  set(CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS
-    "CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS-NOTFOUND"
-    CACHE FILEPATH "Forced-missing scanner for regression coverage" FORCE)
-endif()
-
 add_executable(consumer main.cpp)
 target_link_libraries(consumer PRIVATE lexborpp::lexborpp)
 if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.28")
