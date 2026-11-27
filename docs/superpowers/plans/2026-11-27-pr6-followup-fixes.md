@@ -630,6 +630,7 @@ ${out_prefix}_LINK_ITEM
 ${out_prefix}_INCLUDE_DIRS
 ${out_prefix}_COMPILE_DEFINITIONS
 ${out_prefix}_CONCRETE_LIBRARY
+${out_prefix}_RUNTIME_LIBRARY
 ${out_prefix}_NOT_FOUND_MESSAGE
 ```
 
@@ -638,6 +639,11 @@ identified as static by the resolved linkage mode. Do not set it for a generic
 raw library in `AUTO` or for `SHARED`. In raw mode assign
 `concrete_library` to the exact `find_library()` result. This variable is for
 test infrastructure only; it must never enter an install interface property.
+On Windows shared raw fallback, prefer `.dll.lib` / `.dll.a`, including MinGW.
+A plain `.lib` / `.a` is accepted only with a matching DLL. Publish a verified
+runtime path when found or explicitly provided. Runtime overrides must be
+existing regular files ending in the platform shared suffix; directories,
+missing paths, and import/static library suffixes are invalid.
 
 - [ ] **Step 2: build-tree stable wrapper を作る**
 
@@ -712,7 +718,9 @@ export leak checks pass.
   `-DLEXBOR_STATIC`, shared consumer does not.
 - The resolver matrix includes `AUTO + lexbor_static`,
   `AUTO + generic fake shared`, `STATIC + generic fake static`,
-  `SHARED + generic fake shared`, invalid value, and static-only + `SHARED`.
+  `SHARED + generic fake shared`, invalid value, static-only + `SHARED`, and
+  direct Windows/MinGW policy simulations for `.lib` / `.dll.a` / plain `.a`
+  with and without validated runtime DLLs.
 - MSVC CI: consumer uses preprocessor assertions and compiles real Lexbor headers.
 - Visual Studio generators must not require `compile_commands.json`.
 
@@ -740,7 +748,6 @@ Use shell-compatible defaults:
 ```sh
 : "${VCPKG_ROOT:=$HOME/vm/vcpkg}"
 : "${VCPKG_TARGET_TRIPLET:=x64-linux-static}"
-: "${VCPKG_OVERLAY_PORTS:=$VCPKG_ROOT/ports}"
 
 if ! VCPKG_ROOT=$(readlink -f "$VCPKG_ROOT"); then
   echo "error: cannot resolve VCPKG_ROOT: $VCPKG_ROOT" >&2
@@ -751,7 +758,17 @@ if [ ! -d "$VCPKG_ROOT" ] ||
   echo "error: VCPKG_ROOT is not a vcpkg checkout: $VCPKG_ROOT" >&2
   exit 1
 fi
-export VCPKG_ROOT VCPKG_TARGET_TRIPLET VCPKG_OVERLAY_PORTS
+export VCPKG_ROOT VCPKG_TARGET_TRIPLET
+if [ -n "${VCPKG_OVERLAY_PORTS:-}" ]; then
+  export VCPKG_OVERLAY_PORTS
+else
+  unset VCPKG_OVERLAY_PORTS
+fi
+if [ -n "${VCPKG_OVERLAY_TRIPLETS:-}" ]; then
+  export VCPKG_OVERLAY_TRIPLETS
+else
+  unset VCPKG_OVERLAY_TRIPLETS
+fi
 ```
 
 Quote all paths and pass:
@@ -760,6 +777,8 @@ Quote all paths and pass:
 cmake -B "$BUILD_DIR" \
   "-DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" \
   "-DVCPKG_TARGET_TRIPLET=$VCPKG_TARGET_TRIPLET" \
+  "-DVCPKG_OVERLAY_PORTS=${VCPKG_OVERLAY_PORTS:-}" \
+  "-DVCPKG_OVERLAY_TRIPLETS=${VCPKG_OVERLAY_TRIPLETS:-}" \
   -DLEXBORPP_NATIVE_ARCH=ON \
   -DCMAKE_BUILD_TYPE=Release \
   -S .
@@ -800,6 +819,12 @@ simple symlink would canonicalize back to the old path. Run an existing non-vcpk
 directory and a nonexistent path; both must fail the `-d` / toolchain-file checks
 with a clear error. Finally unset the triplet on a clean output and assert the
 default is `x64-linux-static`.
+
+For both overlay variables, seed stale task-local cache entries, run with the
+environment variable unset, and assert the cache value becomes empty. Then set
+semicolon-separated existing directories and assert the full list reaches the
+CMake cache as one quoted argument. The regression script
+`test/cmake/build_sh_overlay_cache_test.sh` reproduces both cases.
 
 - [ ] **Step 3: コミット**
 

@@ -36,6 +36,31 @@ if(NOT resolver_policy_result EQUAL 0)
     "${resolver_policy_output}\n${resolver_policy_error}")
 endif()
 
+if(UNIX AND LEXBORPP_TOOLCHAIN_FILE
+    AND LEXBORPP_TOOLCHAIN_FILE MATCHES
+      "/scripts/buildsystems/vcpkg\\.cmake$")
+  get_filename_component(vcpkg_root
+    "${LEXBORPP_TOOLCHAIN_FILE}" DIRECTORY)
+  get_filename_component(vcpkg_root "${vcpkg_root}" DIRECTORY)
+  get_filename_component(vcpkg_root "${vcpkg_root}" DIRECTORY)
+  execute_process(
+    COMMAND sh
+      "${LEXBORPP_SOURCE_DIR}/test/cmake/build_sh_overlay_cache_test.sh"
+      "${LEXBORPP_SOURCE_DIR}"
+      "${work_dir}/build-script-overlay-cache"
+      "${vcpkg_root}"
+    RESULT_VARIABLE build_script_overlay_result
+    OUTPUT_VARIABLE build_script_overlay_output
+    ERROR_VARIABLE build_script_overlay_error)
+  if(NOT build_script_overlay_result EQUAL 0)
+    message(FATAL_ERROR
+      "build.sh overlay cache test failed "
+      "(${build_script_overlay_result}):\n"
+      "${build_script_overlay_output}\n"
+      "${build_script_overlay_error}")
+  endif()
+endif()
+
 function(lexborpp_generator_args result)
   set(args -G "${LEXBORPP_GENERATOR}")
   if(LEXBORPP_GENERATOR_INSTANCE)
@@ -303,7 +328,8 @@ lexborpp_build_fake(
   STATIC_GENERIC "${fake_static_only_prefix}" "fake-static-only")
 lexborpp_build_fake(
   SHARED_GENERIC "${fake_shared_only_prefix}" "fake-shared-only")
-if(WIN32)
+if(WIN32 AND
+    CMAKE_IMPORT_LIBRARY_SUFFIX STREQUAL ".lib")
   lexborpp_build_fake(
     SHARED_PLAIN_GENERIC "${fake_shared_plain_prefix}"
     "fake-shared-plain")
@@ -327,8 +353,13 @@ list(GET fake_generic_static_libraries 0 fake_generic_static_library)
 if(WIN32)
   file(GLOB fake_generic_shared_runtime_libraries
     "${fake_generic_combined_prefix}/bin/*lexbor${LEXBORPP_SHARED_LIBRARY_SUFFIX}")
-  file(GLOB fake_generic_shared_link_libraries
-    "${fake_generic_combined_prefix}/lib/*lexbor.dll${LEXBORPP_IMPORT_LIBRARY_SUFFIX}")
+  if(LEXBORPP_IMPORT_LIBRARY_SUFFIX STREQUAL ".lib")
+    file(GLOB fake_generic_shared_link_libraries
+      "${fake_generic_combined_prefix}/lib/*lexbor.dll${LEXBORPP_IMPORT_LIBRARY_SUFFIX}")
+  else()
+    file(GLOB fake_generic_shared_link_libraries
+      "${fake_generic_combined_prefix}/lib/*lexbor${LEXBORPP_IMPORT_LIBRARY_SUFFIX}")
+  endif()
 else()
   file(GLOB fake_generic_shared_runtime_libraries
     "${fake_generic_combined_prefix}/lib/*lexbor${LEXBORPP_SHARED_LIBRARY_SUFFIX}")
@@ -433,12 +464,6 @@ lexborpp_raw_consumer_args(
   "${fake_shared_only_prefix}"
   raw_shared_only_args)
 
-set(raw_expected_runtime_args)
-if(WIN32)
-  list(APPEND raw_expected_runtime_args
-    "-DLEXBORPP_EXPECT_RESOLVED_RUNTIME_LIBRARY_SUFFIX=${LEXBORPP_SHARED_LIBRARY_SUFFIX}")
-endif()
-
 lexborpp_configure_build_test(
   "${consumer_source}" "${work_dir}/consumer-raw-generic-shared"
   "raw generic SHARED consumer"
@@ -446,8 +471,7 @@ lexborpp_configure_build_test(
   "-DLEXBORPP_RAW_LEXBOR_LINKAGE=SHARED"
   "-DLEXBORPP_EXPECT_LINKAGE=SHARED"
   "-DLEXBORPP_FAKE_LEXBOR_RUNTIME_DIR=${raw_shared_runtime_dir}"
-  "-DLEXBORPP_EXPECT_RESOLVED_LIBRARY_SUFFIX=${LEXBORPP_SHARED_LINKER_SUFFIX_FOR_TEST}"
-  ${raw_expected_runtime_args})
+  "-DLEXBORPP_EXPECT_RESOLVED_LIBRARY_SUFFIX=${LEXBORPP_SHARED_LINKER_SUFFIX_FOR_TEST}")
 
 lexborpp_configure_build_test(
   "${consumer_source}" "${work_dir}/consumer-raw-generic-auto-shared"
@@ -456,8 +480,7 @@ lexborpp_configure_build_test(
   "-DLEXBORPP_RAW_LEXBOR_LINKAGE=AUTO"
   "-DLEXBORPP_EXPECT_LINKAGE=SHARED"
   "-DLEXBORPP_FAKE_LEXBOR_RUNTIME_DIR=${raw_shared_runtime_dir}"
-  "-DLEXBORPP_EXPECT_RESOLVED_LIBRARY_SUFFIX=${LEXBORPP_SHARED_LINKER_SUFFIX_FOR_TEST}"
-  ${raw_expected_runtime_args})
+  "-DLEXBORPP_EXPECT_RESOLVED_LIBRARY_SUFFIX=${LEXBORPP_SHARED_LINKER_SUFFIX_FOR_TEST}")
 
 lexborpp_require_configure_failure(
   "${consumer_source}" "${work_dir}/consumer-invalid-linkage"
@@ -479,7 +502,8 @@ lexborpp_require_configure_failure(
   ${raw_shared_only_args}
   "-DLEXBORPP_RAW_LEXBOR_LINKAGE=STATIC")
 
-if(WIN32)
+if(WIN32 AND
+    LEXBORPP_IMPORT_LIBRARY_SUFFIX STREQUAL ".lib")
   set(static_only_shared_mismatch
     "ambiguous.*without matching runtime library")
 else()

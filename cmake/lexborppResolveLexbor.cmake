@@ -1,11 +1,59 @@
 function(lexborpp_validate_raw_shared_library
     out_valid out_runtime out_error candidate is_windows import_suffix
-    shared_suffix runtime_override)
+    static_suffix shared_suffix runtime_override)
   set(valid TRUE)
   set(runtime "")
   set(error "")
 
-  if(is_windows)
+  if(runtime_override)
+    if(IS_ABSOLUTE "${runtime_override}")
+      set(runtime "${runtime_override}")
+    else()
+      cmake_path(ABSOLUTE_PATH runtime_override
+        BASE_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" NORMALIZE
+        OUTPUT_VARIABLE runtime)
+    endif()
+
+    if(NOT EXISTS "${runtime}")
+      set(valid FALSE)
+      set(error
+        "Lexbor shared runtime library specified by LEXBORPP_RAW_LEXBOR_RUNTIME_LIBRARY does not exist: '${runtime}'")
+    elseif(IS_DIRECTORY "${runtime}")
+      set(valid FALSE)
+      set(error
+        "Lexbor shared runtime library specified by LEXBORPP_RAW_LEXBOR_RUNTIME_LIBRARY is not a regular file: '${runtime}'")
+    else()
+      set(runtime_name "${runtime}")
+      set(expected_shared_suffix "${shared_suffix}")
+      if(is_windows)
+        string(TOLOWER "${runtime_name}" runtime_name)
+        string(TOLOWER "${expected_shared_suffix}"
+          expected_shared_suffix)
+      endif()
+      string(LENGTH "${expected_shared_suffix}" expected_suffix_length)
+      string(LENGTH "${runtime_name}" runtime_name_length)
+      if(runtime_name_length LESS expected_suffix_length)
+        set(valid FALSE)
+      else()
+        math(EXPR runtime_tail_offset
+          "${runtime_name_length} - ${expected_suffix_length}")
+        string(SUBSTRING "${runtime_name}" "${runtime_tail_offset}" -1
+          runtime_tail)
+        if(NOT runtime_tail STREQUAL expected_shared_suffix)
+          set(valid FALSE)
+        endif()
+      endif()
+      if(NOT valid)
+        set(error
+          "Lexbor shared runtime library specified by LEXBORPP_RAW_LEXBOR_RUNTIME_LIBRARY must end with '${shared_suffix}': '${runtime}'")
+      endif()
+    endif()
+    if(NOT valid)
+      set(runtime "")
+    endif()
+  endif()
+
+  if(valid AND is_windows)
     set(unambiguous FALSE)
     set(runtime_stem "")
     get_filename_component(candidate_name "${candidate}" NAME)
@@ -29,7 +77,9 @@ function(lexborpp_validate_raw_shared_library
     endforeach()
 
     if(NOT unambiguous)
-      foreach(suffix IN ITEMS "${shared_suffix}" "${import_suffix}")
+      set(ambiguous_suffix "${import_suffix}")
+      foreach(suffix IN ITEMS
+          "${shared_suffix}" "${import_suffix}" "${static_suffix}")
         if(NOT suffix)
           continue()
         endif()
@@ -44,6 +94,7 @@ function(lexborpp_validate_raw_shared_library
           if(candidate_tail STREQUAL suffix_lower)
             string(SUBSTRING "${candidate_name}" 0
               "${runtime_stem_length}" runtime_stem)
+            set(ambiguous_suffix "${suffix}")
             if(suffix STREQUAL shared_suffix)
               set(unambiguous TRUE)
               set(runtime "${candidate}")
@@ -54,20 +105,7 @@ function(lexborpp_validate_raw_shared_library
       endforeach()
     endif()
 
-    if(runtime_override)
-      if(IS_ABSOLUTE "${runtime_override}")
-        set(runtime "${runtime_override}")
-      else()
-        cmake_path(ABSOLUTE_PATH runtime_override
-          BASE_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" NORMALIZE
-          OUTPUT_VARIABLE runtime)
-      endif()
-      if(NOT EXISTS "${runtime}")
-        set(valid FALSE)
-        set(error
-          "Lexbor shared runtime library specified by LEXBORPP_RAW_LEXBOR_RUNTIME_LIBRARY does not exist: '${runtime}'")
-      endif()
-    elseif(NOT runtime AND runtime_stem)
+    if(NOT runtime AND runtime_stem)
       get_filename_component(candidate_dir "${candidate}" DIRECTORY)
       get_filename_component(candidate_parent
         "${candidate_dir}" DIRECTORY)
@@ -76,7 +114,8 @@ function(lexborpp_validate_raw_shared_library
           "${candidate_parent}/bin")
         set(runtime_candidate
           "${runtime_dir}/${runtime_stem}${shared_suffix}")
-        if(EXISTS "${runtime_candidate}")
+        if(EXISTS "${runtime_candidate}" AND
+            NOT IS_DIRECTORY "${runtime_candidate}")
           cmake_path(NORMAL_PATH runtime_candidate
             OUTPUT_VARIABLE runtime)
           break()
@@ -87,7 +126,7 @@ function(lexborpp_validate_raw_shared_library
     if(valid AND NOT runtime AND NOT unambiguous)
       set(valid FALSE)
       set(error
-        "ambiguous ${import_suffix} without matching runtime library: '${candidate}'")
+        "ambiguous ${ambiguous_suffix} without matching runtime library: '${candidate}'")
     endif()
   endif()
 
@@ -102,31 +141,37 @@ function(lexborpp_find_raw_library result_name linkage)
   if(linkage STREQUAL "STATIC")
     set(CMAKE_FIND_LIBRARY_SUFFIXES "${CMAKE_STATIC_LIBRARY_SUFFIX}")
   elseif(WIN32)
-    set(CMAKE_FIND_LIBRARY_SUFFIXES "")
-    if(CMAKE_IMPORT_LIBRARY_SUFFIX STREQUAL ".lib")
-      list(APPEND CMAKE_FIND_LIBRARY_SUFFIXES ".dll.lib")
-    elseif(CMAKE_IMPORT_LIBRARY_SUFFIX STREQUAL ".a")
-      list(APPEND CMAKE_FIND_LIBRARY_SUFFIXES ".dll.a")
+    set(unambiguous_result_name
+      "${result_name}_UNAMBIGUOUS")
+    if(CMAKE_IMPORT_LIBRARY_SUFFIX STREQUAL ".dll.a" OR
+        CMAKE_IMPORT_LIBRARY_SUFFIX STREQUAL ".a")
+      set(unambiguous_suffixes ".dll.a" ".dll.lib")
+    else()
+      set(unambiguous_suffixes ".dll.lib" ".dll.a")
     endif()
-    foreach(suffix IN LISTS CMAKE_FIND_LIBRARY_SUFFIXES_ORIGINAL)
-      if(suffix MATCHES "\\.dll\\.(lib|a)$" OR
-          suffix STREQUAL CMAKE_IMPORT_LIBRARY_SUFFIX)
-        list(APPEND CMAKE_FIND_LIBRARY_SUFFIXES "${suffix}")
+    foreach(unambiguous_suffix IN LISTS unambiguous_suffixes)
+      unset(${unambiguous_result_name})
+      unset(${unambiguous_result_name} CACHE)
+      set(CMAKE_FIND_LIBRARY_SUFFIXES "${unambiguous_suffix}")
+      find_library(${unambiguous_result_name} NAMES ${ARGN} NO_CACHE)
+      if(${unambiguous_result_name})
+        set(${result_name}
+          "${${unambiguous_result_name}}" PARENT_SCOPE)
+        return()
       endif()
     endforeach()
-    if(CMAKE_IMPORT_LIBRARY_SUFFIX AND
-        NOT CMAKE_IMPORT_LIBRARY_SUFFIX IN_LIST CMAKE_FIND_LIBRARY_SUFFIXES)
-      list(APPEND CMAKE_FIND_LIBRARY_SUFFIXES
-        "${CMAKE_IMPORT_LIBRARY_SUFFIX}")
-    endif()
-    if(NOT CMAKE_FIND_LIBRARY_SUFFIXES)
-      set(CMAKE_FIND_LIBRARY_SUFFIXES "${CMAKE_SHARED_LIBRARY_SUFFIX}")
-    endif()
+    unset(${unambiguous_result_name})
+    unset(${unambiguous_result_name} CACHE)
+    unset(${result_name})
+    unset(${result_name} CACHE)
+    set(CMAKE_FIND_LIBRARY_SUFFIXES
+      "${CMAKE_IMPORT_LIBRARY_SUFFIX}"
+      "${CMAKE_STATIC_LIBRARY_SUFFIX}")
   else()
     set(CMAKE_FIND_LIBRARY_SUFFIXES "${CMAKE_SHARED_LIBRARY_SUFFIX}")
   endif()
 
-  find_library(${result_name} NAMES ${ARGN})
+  find_library(${result_name} NAMES ${ARGN} NO_CACHE)
   set(${result_name} "${${result_name}}" PARENT_SCOPE)
 endfunction()
 
@@ -191,8 +236,11 @@ function(lexborpp_resolve_lexbor_dependency out_prefix)
       set(compile_definitions LEXBOR_STATIC)
     endif()
   else()
+    unset(_LEXBORPP_LEXBOR_INCLUDE_DIR)
     unset(_LEXBORPP_LEXBOR_INCLUDE_DIR CACHE)
+    unset(_LEXBORPP_LEXBOR_LIBRARY)
     unset(_LEXBORPP_LEXBOR_LIBRARY CACHE)
+    unset(_LEXBORPP_LEXBOR_STATIC_LIBRARY)
     unset(_LEXBORPP_LEXBOR_STATIC_LIBRARY CACHE)
 
     set(LEXBORPP_RAW_LEXBOR_LINKAGE "AUTO" CACHE STRING
@@ -200,7 +248,7 @@ function(lexborpp_resolve_lexbor_dependency out_prefix)
     set_property(CACHE LEXBORPP_RAW_LEXBOR_LINKAGE PROPERTY STRINGS
       AUTO STATIC SHARED)
     set(LEXBORPP_RAW_LEXBOR_RUNTIME_LIBRARY "" CACHE FILEPATH
-      "Lexbor shared runtime library used to disambiguate a Windows import library")
+      "Lexbor shared runtime library used to validate raw shared linkage")
 
     set(allowed_linkage_values AUTO STATIC SHARED)
     if(NOT LEXBORPP_RAW_LEXBOR_LINKAGE IN_LIST allowed_linkage_values)
@@ -254,6 +302,7 @@ function(lexborpp_resolve_lexbor_dependency out_prefix)
               raw_shared_valid raw_shared_runtime raw_shared_error
               "${_LEXBORPP_LEXBOR_LIBRARY}" "${WIN32}"
               "${CMAKE_IMPORT_LIBRARY_SUFFIX}"
+              "${CMAKE_STATIC_LIBRARY_SUFFIX}"
               "${CMAKE_SHARED_LIBRARY_SUFFIX}"
               "${LEXBORPP_RAW_LEXBOR_RUNTIME_LIBRARY}")
             if(raw_shared_valid)

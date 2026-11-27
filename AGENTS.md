@@ -21,7 +21,7 @@
 
 - `build.sh` は未設定時の `VCPKG_ROOT` を `~/vm/vcpkg` にしつつ、呼び出し側から設定された path を上書きせずに使う。無効な path / vcpkg checkout は明示的なエラーで停止する。
 - `VCPKG_TARGET_TRIPLET` も呼び出し側の値を尊重し、未設定時は `x64-linux-static`。値は `-DVCPKG_TARGET_TRIPLET=...` として CMake cache に明示的に渡す。`./build.sh static` は build directory を `build_static/` に変えるだけで、triplet を別の値へ固定しない。
-- `VCPKG_OVERLAY_PORTS` は呼び出し側が設定した場合だけ引き継ぎ、未設定時も空値を `-D` で明示して CMake cache の古い overlay を消去する。
+- `VCPKG_OVERLAY_PORTS` / `VCPKG_OVERLAY_TRIPLETS` は呼び出し側が設定した場合だけ引き継ぎ、未設定時も空値を quote 済み `-D` で明示して CMake cache の古い overlay を消去する。semicolon 区切りの複数 path は 1 argument のまま渡す。
 - 既存 build directory の `CMAKE_TOOLCHAIN_FILE` が今回指定した vcpkg toolchain と異なる場合、configure は停止する。`VCPKG_ROOT` を変更するときは clean な directory または新しい build directory を使う。
 - 最適化フラグは CMake の **`LEXBORPP_NATIVE_ARCH`** オプションに一本化されている (`build.sh` は ON で渡す)。`-Ofast` (fast-math) は使わない。
 - コンパイラは **C++26 を優先、なければ C++23**。C++20 ではビルド不可 (`std::expected`、borrowed_range 対応などで C++23 が必須)。
@@ -49,7 +49,7 @@
 - install export はビルド時に使った外部 Lexbor target 名や絶対 path を埋め込まず、安定した内部 wrapper `lexborpp::lexbor` だけを `lexborpp::lexborpp` から参照する。
 - 利用側の package config は、`lexbor::lexbor_static` → `lexbor::lexbor` の順に config target を探し、なければ raw header / library fallback を使う。
 - raw fallback の cache variable は `LEXBORPP_RAW_LEXBOR_LINKAGE=AUTO|STATIC|SHARED`。`AUTO` の generic `lexbor` は shared 扱いなので、generic 名の static library は `STATIC` を明示する。
-- Windows の raw shared では `.dll.lib` / `.dll.a` を優先する。plain `.lib` / `.a` は一致する basename の DLL が library directory / sibling・prefix `bin` にある場合だけ受理し、`LEXBORPP_RAW_LEXBOR_RUNTIME_LIBRARY` で DLL を明示して曖昧性を解消できる。runtime がない plain `.lib` / `.a` は SHARED / generic AUTO で configure 失敗する。`STATIC` mode の扱いは変わらない。
+- Windows の raw shared では `.dll.lib` / `.dll.a` を優先する（MinGW の通常 import library は `.dll.a`）。plain `.lib` / `.a` は一致する basename の DLL が library directory / sibling・prefix `bin` にある場合だけ受理し、`LEXBORPP_RAW_LEXBOR_RUNTIME_LIBRARY` で runtime を明示して曖昧性を解消できる。runtime がない plain `.lib` / `.a` は SHARED / generic AUTO で configure 失敗する。明示 runtime は既存 regular file かつ `CMAKE_SHARED_LIBRARY_SUFFIX` 終端が必須で、non-Windows にも同じ検査を適用する。directory・不存在 path・`.lib` / `.a` は拒否する。`STATIC` mode の扱いは変わらない。
 - raw static では `LEXBOR_STATIC` を伝搬する。shared では伝搬しない。不正な linkage 値や指定内容に合う header / library が不足する組み合わせは configure 失敗にする。
 
 ## API の癖 (README 以上の細目)
