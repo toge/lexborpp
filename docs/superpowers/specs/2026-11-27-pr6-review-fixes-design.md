@@ -17,14 +17,17 @@ Lexbor 依存関係の解決、raw 静的リンク、ローカルビルドスク
 
 ### 1. 重複 ID では通常走査へフォールバックする
 
-`document_id_index` の map entry に `first` と `ambiguous` を保持する。既存の
-`find(id)`、`contains(id)`、`size()` の意味は変えず、重複検出だけを
-`is_ambiguous(id)` で公開する。
+`document_id_index` の map entry に `first` と `ambiguous` を保持し、構築時の
+root pointer も保持する。既存の `find(id)`、`contains(id)`、`size()` の意味は
+変えず、重複検出を `is_ambiguous(id)`、検索範囲の包含判定を
+`covers_scope(scope)` で公開する。`covers_scope(scope)` は index root が scope
+自身または scope の祖先である場合だけ `true` を返す。
 
-runtime / NTTP の indexed query は、右端 compound に ID があり、かつ
-`!index.is_ambiguous(id)` の場合だけ単一ノード fast path を使う。それ以外は
-通常の DOM 走査を呼ぶ。したがって重複 ID、スコープ外候補、追加 simple selector を
-含む検索でも通常検索と同じ first/all 結果になる。インデックス作成前後の DOM 編集に
+runtime / NTTP の indexed query は、右端 compound に ID があり、
+`index.covers_scope(node)` が true で、かつ `!index.is_ambiguous(id)` の場合だけ
+単一ノード fast path を使う。それ以外は通常の DOM 走査を呼ぶ。したがって
+重複 ID、検索範囲より狭い index root、スコープ外候補、追加 simple selector を含む
+検索でも通常検索と同じ first/all 結果になる。インデックス作成前後の DOM 編集に
 ついては従来どおり `rebuild()` が必要である。
 
 ### 2. インストール用の安定した Lexbor wrapper target を持つ
@@ -54,6 +57,7 @@ package config が即終了する構成は使わない。どちらの経路で�
 
 raw lookup は
 `LEXBORPP_RAW_LEXBOR_LINKAGE=AUTO|STATIC|SHARED` で探索規則まで固定する。
+cache variable が未設定なら `AUTO` を既定値にする。
 
 | 値 | 探索対象 | 選択時の linkage |
 | --- | --- | --- |
@@ -61,7 +65,8 @@ raw lookup は
 | `STATIC` | `lexbor_static`、見つからなければ generic `lexbor` | どちらも static |
 | `SHARED` | generic `lexbor` のみ | shared |
 
-`AUTO` 以外の値は大文字小文字も含めて構成エラーとする。`SHARED` で
+許可する値は `AUTO`、`STATIC`、`SHARED` の3つだけであり、それ以外と
+大小文字違いは構成エラーとする。`SHARED` で
 `lexbor_static` しか存在しない場合、または `STATIC` / `SHARED` 指定の探索で
 library が見つからない場合は、不完全な target を作らず失敗する。
 generic `lexbor.lib` / `liblexbor.a` は basename だけでは import library と
@@ -106,6 +111,7 @@ triplet は環境変数または既定値 `x64-linux-static` を取り、CMake c
    - package config なしの raw header + static library
 4. raw linkage matrix を実コンパイル / リンクで確認する。
    - `AUTO + lexbor_static`: `LEXBOR_STATIC` が定義され、リンク成功
+   - `AUTO + generic lexbor`: `LEXBOR_STATIC` が未定義で、リンク成功
    - `STATIC + generic lexbor`: `LEXBOR_STATIC` が定義され、リンク成功
    - `SHARED + generic lexbor`: `LEXBOR_STATIC` が未定義で、リンク成功
    - `SHARED + lexbor_static のみ`: configure 失敗
@@ -119,8 +125,10 @@ triplet は環境変数または既定値 `x64-linux-static` を取り、CMake c
    override が維持されることを確認する。
 6. `add_subdirectory()` consumer、raw 共有 library consumer、依存が完全に存在しない
    consumer を CTest に追加し、それぞれリンク成功 / configure 失敗理由を確認する。
-7. 重複 ID の先頭候補が scope 外、先頭候補が追加 simple selector を満たさない、
-   後続候補が満たす、複数候補を all で返す各ケースを runtime / NTTP で確認する。
+7. 重複 ID の先頭候補が query scope 外、先頭候補が追加 simple selector を
+   満たさない、後続候補が満たす、複数候補を all で返す各ケースを runtime /
+   NTTP で確認する。さらに index root が query root より狭く、index 外の重複 ID
+   だけが selector に一致する逆方向 scope ケースも確認する。
 8. 既存の build、CTest 3 target、WASI / Emscripten CI、MSVC CI を回す。
 
 ## ドキュメント
@@ -129,7 +137,8 @@ triplet は環境変数または既定値 `x64-linux-static` を取り、CMake c
 
 - indexed query は重複 ID キーで fast path を使わず、通常走査と同じ結果にする。
 - `document_id_index::find()` のみ先頭ノードを返す first-wins 契約を維持する。
-- `is_ambiguous(id)` の追加と、`rebuild()` による再構築が必要なケースを記載する。
+- `is_ambiguous(id)` / `covers_scope(scope)` の追加と、`rebuild()` による再構築が
+  必要なケースを記載する。
 - installed package は config package だけでなく raw header / library fallback を使える。
 - raw static の linkage が名前から曖昧な場合は
   `LEXBORPP_RAW_LEXBOR_LINKAGE=STATIC` を利用する。
