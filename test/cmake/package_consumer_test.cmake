@@ -201,10 +201,26 @@ function(lexborpp_configure_ninja_without_module_scan
     message(FATAL_ERROR
       "${label} generated an active Clang scanner name:\n${ninja_rules}")
   endif()
-  set(build_ninja "${binary}/build.ninja")
+  if(LEXBORPP_GENERATOR STREQUAL "Ninja Multi-Config")
+    set(build_ninja
+      "${binary}/CMakeFiles/impl-${LEXBORPP_TEST_CONFIG}.ninja")
+  else()
+    set(build_ninja "${binary}/build.ninja")
+  endif()
+  if(NOT EXISTS "${build_ninja}")
+    message(FATAL_ERROR
+      "${label} did not generate ${build_ninja}")
+  endif()
   file(READ "${build_ninja}" ninja_build)
+  if(LEXBORPP_GENERATOR STREQUAL "Ninja Multi-Config")
+    set(expected_unscanned_rule
+      "CXX_COMPILER__consumer_unscanned_${LEXBORPP_TEST_CONFIG}")
+  else()
+    set(expected_unscanned_rule
+      "CXX_COMPILER__consumer_unscanned_[^ ]+")
+  endif()
   if(NOT ninja_build MATCHES
-      "CXX_COMPILER__consumer_unscanned_[^ ]+.*main\\.cpp")
+      "${expected_unscanned_rule}.*main\\.cpp")
     message(FATAL_ERROR
       "${label} did not select the unscanned consumer object rule:\n"
       "${ninja_build}")
