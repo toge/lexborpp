@@ -230,13 +230,14 @@ template <detail::fixed_string Selector>
   }
   constexpr auto info = compiled_id_info<Selector>();
   if constexpr (info.found && info.is_last) {
-    auto* found = index.find(info.value);
-    if (found == nullptr || !is_descendant_of(found, node)) return nullptr;
-    if (match_selector_compiled<Selector>(found)) return found;
-    return nullptr;
-  } else {
-    return query_selector_impl<Selector>(node);
+    if (index.covers_scope(node) && !index.is_ambiguous(info.value)) {
+      auto* found = index.find(info.value);
+      if (found == nullptr || !is_descendant_of(found, node)) return nullptr;
+      if (match_selector_compiled<Selector>(found)) return found;
+      return nullptr;
+    }
   }
+  return query_selector_impl<Selector>(node);
 }
 
 template <detail::fixed_string Selector>
@@ -248,13 +249,14 @@ template <detail::fixed_string Selector>
   }
   constexpr auto info = compiled_id_info<Selector>();
   if constexpr (info.found && info.is_last) {
-    auto* found = index.find(info.value);
-    if (found == nullptr || !is_descendant_of(found, node)) return {};
-    if (match_selector_compiled<Selector>(found)) return {found};
-    return {};
-  } else {
-    return query_selector_all_impl<Selector>(node);
+    if (index.covers_scope(node) && !index.is_ambiguous(info.value)) {
+      auto* found = index.find(info.value);
+      if (found == nullptr || !is_descendant_of(found, node)) return {};
+      if (match_selector_compiled<Selector>(found)) return {found};
+      return {};
+    }
   }
+  return query_selector_all_impl<Selector>(node);
 }
 
 }  // namespace detail

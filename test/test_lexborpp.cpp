@@ -1414,6 +1414,114 @@ TEST_CASE("document_id_index registers only the first duplicate id") {
   }
 }
 
+TEST_CASE("indexed queries fall back for ambiguous ids") {
+  auto fixture = html_document_fixture{
+    R"(<div><i id="dup"></i><i id="dup" class="wanted"></i></div>)"};
+  auto* root = fixture.document_node();
+  auto index = lexborpp::document_id_index{root};
+
+  auto first_dup = lexborpp::query_selector(root, "#dup");
+  REQUIRE(first_dup.has_value());
+  REQUIRE(first_dup.value() != nullptr);
+  REQUIRE(index.find("dup") == first_dup.value());
+  REQUIRE(index.is_ambiguous("dup"));
+
+  for (auto const* selector : {"#dup", "#dup.wanted"}) {
+    CAPTURE(selector);
+
+    auto plain_first = lexborpp::query_selector(root, selector);
+    auto indexed_first = lexborpp::query_selector(root, selector, index);
+    REQUIRE(plain_first.has_value());
+    REQUIRE(indexed_first.has_value());
+    REQUIRE(indexed_first.value() == plain_first.value());
+
+    auto plain_all = lexborpp::query_selector_all(root, selector);
+    auto indexed_all = lexborpp::query_selector_all(root, selector, index);
+    REQUIRE(plain_all.has_value());
+    REQUIRE(indexed_all.has_value());
+    REQUIRE(indexed_all.value() == plain_all.value());
+  }
+
+  REQUIRE(lexborpp::query_selector_all<"#dup">(root).size() == 2);
+  REQUIRE(lexborpp::has_class(
+    lexborpp::query_selector<"#dup.wanted">(root), "wanted"));
+  REQUIRE(lexborpp::query_selector<"#dup">(root, index)
+    == lexborpp::query_selector<"#dup">(root));
+  REQUIRE(lexborpp::query_selector<"#dup.wanted">(root, index)
+    == lexborpp::query_selector<"#dup.wanted">(root));
+  REQUIRE(lexborpp::query_selector_all<"#dup">(root, index)
+    == lexborpp::query_selector_all<"#dup">(root));
+  REQUIRE(lexborpp::query_selector_all<"#dup.wanted">(root, index)
+    == lexborpp::query_selector_all<"#dup.wanted">(root));
+}
+
+TEST_CASE("indexed queries require the index root to cover the query scope") {
+  auto fixture = html_document_fixture{
+    R"(<section id="outside"><i id="dup"></i></section>
+       <section id="inside"><i id="dup" class="wanted"></i></section>)"};
+  auto* root = fixture.document_node();
+  auto* inside = fixture.by_id("inside");
+  auto* outside = fixture.by_id("outside");
+  auto document_index = lexborpp::document_id_index{root};
+  auto inside_index = lexborpp::document_id_index{inside};
+
+  REQUIRE(document_index.covers_scope(inside));
+  REQUIRE_FALSE(inside_index.covers_scope(root));
+  REQUIRE_FALSE(inside_index.covers_scope(outside));
+
+  for (auto const* selector : {"#dup", "#dup.wanted"}) {
+    CAPTURE(selector);
+
+    auto runtime_plain = lexborpp::query_selector(inside, selector);
+    auto runtime_indexed =
+      lexborpp::query_selector(inside, selector, document_index);
+    REQUIRE(runtime_plain.has_value());
+    REQUIRE(runtime_indexed.has_value());
+    REQUIRE(runtime_indexed.value() == runtime_plain.value());
+
+    auto runtime_all_plain =
+      lexborpp::query_selector_all(inside, selector);
+    auto runtime_all_indexed =
+      lexborpp::query_selector_all(inside, selector, document_index);
+    REQUIRE(runtime_all_plain.has_value());
+    REQUIRE(runtime_all_indexed.has_value());
+    REQUIRE(runtime_all_indexed.value() == runtime_all_plain.value());
+
+    auto reverse_plain = lexborpp::query_selector(root, selector);
+    auto reverse_indexed =
+      lexborpp::query_selector(root, selector, inside_index);
+    REQUIRE(reverse_plain.has_value());
+    REQUIRE(reverse_indexed.has_value());
+    REQUIRE(reverse_indexed.value() == reverse_plain.value());
+
+    auto reverse_all_plain =
+      lexborpp::query_selector_all(root, selector);
+    auto reverse_all_indexed =
+      lexborpp::query_selector_all(root, selector, inside_index);
+    REQUIRE(reverse_all_plain.has_value());
+    REQUIRE(reverse_all_indexed.has_value());
+    REQUIRE(reverse_all_indexed.value() == reverse_all_plain.value());
+  }
+
+  REQUIRE(lexborpp::query_selector<"#dup">(inside, document_index)
+    == lexborpp::query_selector<"#dup">(inside));
+  REQUIRE(lexborpp::query_selector<"#dup.wanted">(inside, document_index)
+    == lexborpp::query_selector<"#dup.wanted">(inside));
+  REQUIRE(lexborpp::query_selector_all<"#dup">(inside, document_index)
+    == lexborpp::query_selector_all<"#dup">(inside));
+  REQUIRE(lexborpp::query_selector_all<"#dup.wanted">(
+      inside, document_index)
+    == lexborpp::query_selector_all<"#dup.wanted">(inside));
+  REQUIRE(lexborpp::query_selector<"#dup">(root, inside_index)
+    == lexborpp::query_selector<"#dup">(root));
+  REQUIRE(lexborpp::query_selector<"#dup.wanted">(root, inside_index)
+    == lexborpp::query_selector<"#dup.wanted">(root));
+  REQUIRE(lexborpp::query_selector_all<"#dup">(root, inside_index)
+    == lexborpp::query_selector_all<"#dup">(root));
+  REQUIRE(lexborpp::query_selector_all<"#dup.wanted">(root, inside_index)
+    == lexborpp::query_selector_all<"#dup.wanted">(root));
+}
+
 TEST_CASE("document_id_index goes stale after DOM edits until rebuild") {
   auto fixture = html_document_fixture{R"(<div id="target"><b>hi</b></div>)"};
   auto* root = fixture.document_node();

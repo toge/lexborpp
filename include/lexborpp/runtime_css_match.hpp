@@ -205,7 +205,9 @@ template <std::size_t Max>
   if (!spec) return std::unexpected(spec.error());
   if (spec->group_count == 0) return std::unexpected(std::errc::invalid_argument);
   auto const pf = runtime_get_id_prefilter(*spec);
-  if (pf.found && pf.is_last) {
+  if (pf.found && pf.is_last &&
+      index.covers_scope(node) &&
+      !index.is_ambiguous(pf.value)) {
     auto* found = index.find(pf.value);
     if (found == nullptr || !is_descendant_of(found, node)) return nullptr;
     if (match_runtime_selector(found, *spec)) return found;
@@ -226,7 +228,9 @@ template <std::size_t Max>
   return detail::with_bad_alloc_guard(
     [&]() -> std::expected<std::vector<lxb_dom_node_t*>, std::errc> {
       auto const pf = runtime_get_id_prefilter(*spec);
-      if (pf.found && pf.is_last) {
+      if (pf.found && pf.is_last &&
+          index.covers_scope(node) &&
+          !index.is_ambiguous(pf.value)) {
         auto* found = index.find(pf.value);
         if (found == nullptr || !is_descendant_of(found, node)) return std::vector<lxb_dom_node_t*>{};
         if (match_runtime_selector(found, *spec)) return std::vector<lxb_dom_node_t*>{found};
