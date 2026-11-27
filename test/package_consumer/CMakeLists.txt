@@ -2,6 +2,30 @@ cmake_minimum_required(VERSION 3.25...3.31)
 project(lexborpp_consumer LANGUAGES CXX)
 
 find_package(lexborpp CONFIG REQUIRED)
+get_property(lexbor_links_before TARGET lexborpp::lexbor
+  PROPERTY INTERFACE_LINK_LIBRARIES)
+get_property(lexbor_includes_before TARGET lexborpp::lexbor
+  PROPERTY INTERFACE_INCLUDE_DIRECTORIES)
+get_property(lexbor_defs_before TARGET lexborpp::lexbor
+  PROPERTY INTERFACE_COMPILE_DEFINITIONS)
+
+find_package(lexborpp CONFIG REQUIRED)
+get_property(lexbor_links_after TARGET lexborpp::lexbor
+  PROPERTY INTERFACE_LINK_LIBRARIES)
+get_property(lexbor_includes_after TARGET lexborpp::lexbor
+  PROPERTY INTERFACE_INCLUDE_DIRECTORIES)
+get_property(lexbor_defs_after TARGET lexborpp::lexbor
+  PROPERTY INTERFACE_COMPILE_DEFINITIONS)
+
+if(NOT "${lexbor_links_before}" STREQUAL "${lexbor_links_after}" OR
+    NOT "${lexbor_includes_before}" STREQUAL "${lexbor_includes_after}" OR
+    NOT "${lexbor_defs_before}" STREQUAL "${lexbor_defs_after}")
+  message(FATAL_ERROR
+    "repeated find_package(lexborpp CONFIG) mutated lexborpp::lexbor "
+    "properties: links='${lexbor_links_before}'->'${lexbor_links_after}', "
+    "includes='${lexbor_includes_before}'->'${lexbor_includes_after}', "
+    "defs='${lexbor_defs_before}'->'${lexbor_defs_after}'")
+endif()
 
 add_executable(consumer main.cpp)
 target_link_libraries(consumer PRIVATE lexborpp::lexborpp)

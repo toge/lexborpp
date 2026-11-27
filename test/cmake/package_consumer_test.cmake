@@ -341,7 +341,9 @@ elseif(LEXBORPP_VCPKG_TARGET_TRIPLET AND
     set(static_triplet "${CMAKE_MATCH_1}-static")
   endif()
   if(EXISTS
-      "${LEXBORPP_VCPKG_INSTALLED_DIR}/${static_triplet}/share/lexbor/lexborConfig.cmake")
+      "${LEXBORPP_VCPKG_INSTALLED_DIR}/${static_triplet}/share/lexbor/lexborConfig.cmake"
+      OR EXISTS
+      "${LEXBORPP_VCPKG_INSTALLED_DIR}/${static_triplet}/share/lexbor/lexbor-config.cmake")
     lexborpp_configure_build_test(
       "${consumer_source}" "${work_dir}/consumer-vcpkg-static"
       "installed vcpkg STATIC consumer"

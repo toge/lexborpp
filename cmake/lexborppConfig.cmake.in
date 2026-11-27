@@ -9,19 +9,27 @@ if(NOT LEXBORPP_RESOLVED_FOUND)
   return()
 endif()
 
+set(_lexborpp_configure_lexbor_wrapper FALSE)
+if(NOT TARGET lexborpp::lexbor)
+  set(_lexborpp_configure_lexbor_wrapper TRUE)
+endif()
+
 include("${CMAKE_CURRENT_LIST_DIR}/lexborppTargets.cmake")
 
-if(LEXBORPP_RESOLVED_LINK_ITEM)
-  set_property(TARGET lexborpp::lexbor APPEND PROPERTY
-    INTERFACE_LINK_LIBRARIES "${LEXBORPP_RESOLVED_LINK_ITEM}")
+if(_lexborpp_configure_lexbor_wrapper)
+  if(LEXBORPP_RESOLVED_LINK_ITEM)
+    set_property(TARGET lexborpp::lexbor APPEND PROPERTY
+      INTERFACE_LINK_LIBRARIES "${LEXBORPP_RESOLVED_LINK_ITEM}")
+  endif()
+  if(LEXBORPP_RESOLVED_INCLUDE_DIRS)
+    set_property(TARGET lexborpp::lexbor APPEND PROPERTY
+      INTERFACE_INCLUDE_DIRECTORIES "${LEXBORPP_RESOLVED_INCLUDE_DIRS}")
+  endif()
+  if(LEXBORPP_RESOLVED_COMPILE_DEFINITIONS)
+    set_property(TARGET lexborpp::lexbor APPEND PROPERTY
+      INTERFACE_COMPILE_DEFINITIONS "${LEXBORPP_RESOLVED_COMPILE_DEFINITIONS}")
+  endif()
 endif()
-if(LEXBORPP_RESOLVED_INCLUDE_DIRS)
-  set_property(TARGET lexborpp::lexbor APPEND PROPERTY
-    INTERFACE_INCLUDE_DIRECTORIES "${LEXBORPP_RESOLVED_INCLUDE_DIRS}")
-endif()
-if(LEXBORPP_RESOLVED_COMPILE_DEFINITIONS)
-  set_property(TARGET lexborpp::lexbor APPEND PROPERTY
-    INTERFACE_COMPILE_DEFINITIONS "${LEXBORPP_RESOLVED_COMPILE_DEFINITIONS}")
-endif()
+unset(_lexborpp_configure_lexbor_wrapper)
 
 check_required_components(lexborpp)

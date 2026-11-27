@@ -1770,6 +1770,45 @@ TEST_CASE("serialization propagates OOM instead of returning partial output") {
     REQUIRE(propagated_bad_alloc);
   }
 }
+
+TEST_CASE("document_id_index::rebuild preserves previous snapshot on OOM") {
+  auto fixture_a = html_document_fixture{R"(<div id="orig"><span id="child">a</span></div>)"};
+  auto fixture_b = html_document_fixture{R"(<div id="b1"><span id="b2">b</span></div>)"};
+  auto* const root_a = fixture_a.document_node();
+  auto* const root_b = fixture_b.document_node();
+  auto* const orig = fixture_a.by_id("orig");
+  auto* const b1 = fixture_b.by_id("b1");
+  REQUIRE(orig != nullptr);
+  REQUIRE(b1 != nullptr);
+
+  auto index = lexborpp::document_id_index{root_a};
+  REQUIRE(index.size() == 2);
+  REQUIRE(index.covers_scope(root_a));
+  REQUIRE_FALSE(index.covers_scope(root_b));
+
+  for (auto const after_first : {false, true}) {
+    CAPTURE(after_first);
+    auto threw_bad_alloc = false;
+    {
+      auto const fail = allocation_failure_scope{after_first};
+      try {
+        index.rebuild(root_b);
+      } catch (std::bad_alloc const&) {
+        threw_bad_alloc = true;
+      }
+    }
+    REQUIRE(threw_bad_alloc);
+    REQUIRE(index.size() == 2);
+    REQUIRE(index.find("orig") == orig);
+    REQUIRE(index.find("b1") == nullptr);
+    REQUIRE(index.covers_scope(root_a));
+    REQUIRE_FALSE(index.covers_scope(root_b));
+
+    auto const fallback = lexborpp::query_selector(root_b, "#b1", index);
+    REQUIRE(fallback.has_value());
+    REQUIRE(fallback.value() == b1);
+  }
+}
 #endif
 
 TEST_CASE("indexed queries match normal scans for every combinator") {

@@ -60,7 +60,6 @@ public:
   [[nodiscard]] auto size() const noexcept -> std::size_t { return map_.size(); }
 
   void rebuild(lxb_dom_node_t const* root) {
-    map_.clear();
     build(root);
   }
 
@@ -70,20 +69,6 @@ private:
     bool ambiguous{};
   };
 
-  void build(lxb_dom_node_t const* root) {
-    root_ = const_cast<lxb_dom_node_t*>(root);
-    if (root_ == nullptr) return;
-    map_.reserve(128); // ponytail: 1k idsで-26%、flat_hash_mapは依存増で却下
-    for (auto* node : node_walker{root_}) {
-      if (is_non_element_node(node)) continue;
-      auto const id = get_attr_value(node, "id");
-      if (!id.has_value() || id->empty()) continue;
-      auto [entry, inserted] =
-        map_.try_emplace(std::string{*id}, index_entry{node, false});
-      if (!inserted) entry->second.ambiguous = true;
-    }
-  }
-
   // Transparent hash/equality enables lookup by std::string_view without
   // constructing a temporary std::string (avoids a per-lookup heap allocation).
   struct transparent_string_hash {
@@ -92,8 +77,34 @@ private:
       return std::hash<std::string_view>{}(sv);
     }
   };
-  std::unordered_map<std::string, index_entry,
-                     transparent_string_hash, std::equal_to<>> map_;
+  using map_type = std::unordered_map<std::string, index_entry,
+                                      transparent_string_hash, std::equal_to<>>;
+
+  void build(lxb_dom_node_t const* root) {
+    auto* const next_root = const_cast<lxb_dom_node_t*>(root);
+    auto next_map = map_type{};
+    if (next_root != nullptr) {
+      next_map.reserve(128); // ponytail: 1k idsで-26%、flat_hash_mapは依存増で却下
+      for (auto* node : node_walker{next_root}) {
+        if (is_non_element_node(node)) {
+          continue;
+        }
+        auto const id = get_attr_value(node, "id");
+        if (!id.has_value() || id->empty()) {
+          continue;
+        }
+        auto [entry, inserted] =
+          next_map.try_emplace(std::string{*id}, index_entry{node, false});
+        if (!inserted) {
+          entry->second.ambiguous = true;
+        }
+      }
+    }
+    map_.swap(next_map);
+    root_ = next_root;
+  }
+
+  map_type map_;
   lxb_dom_node_t* root_{};
 };
 
