@@ -4,13 +4,16 @@
  * @file lexborpp/config.hpp
  * @brief ビルドモード設定。
  *
- * lexborpp は既定で例外を許容するが、ランタイム時の例外送出は禁止する。
+ * lexborpp は既定で例外を許容します。
  * コンパイル時評価での不正入力は LEXBORPP_CONSTEVAL_FAIL で通知する。
  * (-fno-exceptions 時は std::abort() になる)
- * ランタイム API の失敗は std::expected<T, std::errc> で返す。
+ * runtime selector API の失敗は std::expected<T, std::errc> で返し、
+ * シリアライズ API の割り当て失敗は std::bad_alloc を送出します。
  */
 
 #include <cstdlib>
+#include <new>
+#include <utility>
 
 /**
  * @brief consteval経路の失敗通知。
@@ -21,8 +24,7 @@
  * std::abort() する。
  */
 namespace lexborpp::detail {
-[[noreturn]] inline void consteval_fail(char const* msg) noexcept {
-  (void)msg;
+[[noreturn]] inline void consteval_fail() noexcept {
   std::abort();
 }
 } // namespace lexborpp::detail
@@ -31,17 +33,33 @@ namespace lexborpp::detail {
 #include <stdexcept>
 #define LEXBORPP_CONSTEVAL_FAIL(msg) throw(msg)
 #else
-#define LEXBORPP_CONSTEVAL_FAIL(msg) ::lexborpp::detail::consteval_fail(msg)
+// msg は定数評価の診断用。-fno-exceptions では abort に置き換わるため破棄する。
+#define LEXBORPP_CONSTEVAL_FAIL(msg) ::lexborpp::detail::consteval_fail()
 #endif
 
-// 後方互換性のため残すが、新コードでは LEXBORPP_CONSTEVAL_FAIL を使用すること。
-#ifndef LEXBORPP_WASI_MINIMAL
-#include <stdexcept>
-#define LEXBORPP_THROW(expr) throw expr
-#else
-#include <cstdlib>
 namespace lexborpp::detail {
-[[noreturn]] inline void fail() noexcept { std::abort(); }
-} // namespace lexborpp::detail
-#define LEXBORPP_THROW(expr) ::lexborpp::detail::fail()
+
+/**
+ * @brief noexcept 境界から bad_alloc を漏らさないためのガードです。
+ *
+ * `f()` を実行し、`std::bad_alloc` のみ `on_oom()` の戻り値へ変換します。
+ * -fno-exceptions では try/catch を書けないため直接実行します。
+ * この場合、割り当て失敗の扱いは標準ライブラリに委ねられます。
+ */
+#ifdef __cpp_exceptions
+template <typename F, typename OnOOM>
+constexpr auto with_bad_alloc_guard(F&& f, OnOOM&& on_oom) -> decltype(f()) {
+  try {
+    return std::forward<F>(f)();
+  } catch (std::bad_alloc const&) {
+    return std::forward<OnOOM>(on_oom)();
+  }
+}
+#else
+template <typename F, typename OnOOM>
+constexpr auto with_bad_alloc_guard(F&& f, OnOOM&&) -> decltype(f()) {
+  return std::forward<F>(f)();
+}
 #endif
+
+} // namespace lexborpp::detail

@@ -32,9 +32,24 @@ public:
     build(root);
   }
 
-  [[nodiscard]] lxb_dom_node_t* find(std::string_view id) const noexcept {
-    auto it = map_.find(id);
-    return it != map_.end() ? it->second : nullptr;
+  [[nodiscard]] auto find(std::string_view id) const noexcept -> lxb_dom_node_t* {
+    auto const it = map_.find(id);
+    return it != map_.end() ? it->second.first : nullptr;
+  }
+
+  [[nodiscard]] auto is_ambiguous(std::string_view id) const noexcept -> bool {
+    auto const it = map_.find(id);
+    return it != map_.end() && it->second.ambiguous;
+  }
+
+  [[nodiscard]] auto covers_scope(lxb_dom_node_t const* scope) const noexcept -> bool {
+    if (root_ == nullptr || scope == nullptr) return false;
+    for (auto* node = const_cast<lxb_dom_node_t*>(scope);
+         node != nullptr;
+         node = node->parent) {
+      if (node == root_) return true;
+    }
+    return false;
   }
 
   [[nodiscard]] bool contains(std::string_view id) const noexcept {
@@ -45,24 +60,14 @@ public:
   [[nodiscard]] auto size() const noexcept -> std::size_t { return map_.size(); }
 
   void rebuild(lxb_dom_node_t const* root) {
-    map_.clear();
     build(root);
   }
 
 private:
-  void build(lxb_dom_node_t const* root) {
-    if (root == nullptr) return;
-    map_.reserve(128); // ponytail: 1k idsで-26%、flat_hash_mapは依存増で却下
-    for (auto* node : node_walker{const_cast<lxb_dom_node_t*>(root)}) {
-      if (is_non_element_node(node)) continue;
-      auto const id = get_attr_value(node, "id");
-      if (id.has_value() && !id->empty()) {
-        // emplace は既存キーでは失敗するため、重複 id は「最初の
-        // 1 件勝ち残り」になる。
-        map_.emplace(std::string(*id), node);
-      }
-    }
-  }
+  struct index_entry {
+    lxb_dom_node_t* first{};
+    bool ambiguous{};
+  };
 
   // Transparent hash/equality enables lookup by std::string_view without
   // constructing a temporary std::string (avoids a per-lookup heap allocation).
@@ -72,8 +77,35 @@ private:
       return std::hash<std::string_view>{}(sv);
     }
   };
-  std::unordered_map<std::string, lxb_dom_node_t*,
-                     transparent_string_hash, std::equal_to<>> map_;
+  using map_type = std::unordered_map<std::string, index_entry,
+                                      transparent_string_hash, std::equal_to<>>;
+
+  void build(lxb_dom_node_t const* root) {
+    auto* const next_root = const_cast<lxb_dom_node_t*>(root);
+    auto next_map = map_type{};
+    if (next_root != nullptr) {
+      next_map.reserve(128); // ponytail: 1k idsで-26%、flat_hash_mapは依存増で却下
+      for (auto* node : node_walker{next_root}) {
+        if (is_non_element_node(node)) {
+          continue;
+        }
+        auto const id = get_attr_value(node, "id");
+        if (!id.has_value() || id->empty()) {
+          continue;
+        }
+        auto [entry, inserted] =
+          next_map.try_emplace(std::string{*id}, index_entry{node, false});
+        if (!inserted) {
+          entry->second.ambiguous = true;
+        }
+      }
+    }
+    map_.swap(next_map);
+    root_ = next_root;
+  }
+
+  map_type map_;
+  lxb_dom_node_t* root_{};
 };
 
 }  // namespace lexborpp

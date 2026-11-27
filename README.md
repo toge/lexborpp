@@ -40,9 +40,15 @@ Lexbor 自体は C 製の高速な HTML パーサです。公式ドキュメン�
 ## WASI Minimal モード
 
 wasip1 (`wasm32-wasip1` / wasi-sdk) 向けに、例外なしでビルドできるモードです。
-`LEXBORPP_WASI_MINIMAL` 定義時は NTTP パーサの例外送出が `std::abort()` に置き換わり、
-`-fno-exceptions` でライブラリ全体 (NTTP 版セレクタ含む) がビルドできます。
-コンパイル時評価での不正セレクタは従来どおりコンパイルエラーになります。
+`-DENABLE_WASI_MINIMAL=ON` で configure すると `LEXBORPP_WASI_MINIMAL=1` が
+`lexborpp::lexborpp` ターゲットの INTERFACE 定義として利用者にも伝搬します。
+`-fno-exceptions` でビルドした場合、NTTP パーサの不正入力は
+`LEXBORPP_CONSTEVAL_FAIL` 経由で `std::abort()` に置き換わり、ライブラリ全体
+(NTTP 版セレクタ含む) が例外なしでビルドできます。コンパイル時評価での不正
+セレクタは従来どおりコンパイルエラーになります。`-fno-exceptions` ビルドでは
+通常の C++ 例外を使えないため、メモリ割り当て失敗を
+`std::errc::not_enough_memory` へ変換することはできません。その場合は標準
+ライブラリの割り当て失敗経路（通常はabort）に従います。
 
 ```bash
 cmake -B build-wasi -S . -G Ninja \
@@ -50,9 +56,10 @@ cmake -B build-wasi -S . -G Ninja \
   -DVCPKG_TARGET_TRIPLET=wasm32-wasip1 \
   -DVCPKG_OVERLAY_TRIPLETS=$PWD/triplets \
   -DVCPKG_CHAINLOAD_TOOLCHAIN_FILE=/opt/wasi-sdk/share/cmake/wasi-sdk-p1.cmake \
+  -DCMAKE_CROSSCOMPILING_EMULATOR=$(which wasmtime) \
   -DENABLE_WASI_MINIMAL=ON
 cmake --build build-wasi
-wasmedge build-wasi/test/smoke_wasi_minimal
+wasmtime build-wasi/test/smoke_wasi_minimal
 ```
 
 `triplets/wasm32-wasip1.cmake` を同梱しているので、`-DVCPKG_OVERLAY_TRIPLETS=$PWD/triplets` で利用できます。
@@ -82,6 +89,20 @@ cmake -B build \
 cmake --build build --parallel
 ```
 
+リポジトリ付属の `build.sh` でも同じ vcpkg 設定を使えます。`VCPKG_ROOT` は
+呼び出し側の値を優先し、未指定時は `~/vm/vcpkg`。`VCPKG_TARGET_TRIPLET` も
+呼び出し側の値を優先し、未指定時の `x64-linux-static` を
+`-DVCPKG_TARGET_TRIPLET=...` として明示的に CMake cache へ渡します。
+`VCPKG_OVERLAY_PORTS` / `VCPKG_OVERLAY_TRIPLETS` に既定値は追加しません。
+呼び出し側の値はそれぞれ `-D...=...` として明示的に渡し、未指定時は空文字も
+渡して既存 CMake cache の古い値を消去します。semicolon 区切りの複数 path は
+1 個の quote 済み CMake argument として保持されます。`./build.sh static` は
+出力先を `build_static/` に変えるだけで、triplet 自体は上書きしません。
+
+既存の build tree に前回と異なる vcpkg toolchain が記録されている場合、
+スクリプトは configure を開始せず停止します。`VCPKG_ROOT` を変更するときは、
+該当 build directory を clean にするか、新しい build directory を使ってください。
+
 ### 3. インストールして `find_package` で使う
 
 このプロジェクトは CMake package config をインストールできます。
@@ -101,7 +122,47 @@ target_link_libraries(your_target
 )
 ```
 
-`lexborpp` の package config は内部で `find_dependency(lexbor CONFIG)` を呼び出します。Lexbor をインストールしていない環境で `find_package(lexborpp CONFIG REQUIRED)` を実行すると `lexbor` が見つからない旨のエラーで失敗しますので、vcpkg / Conan / システムパッケージのいずれかで先に Lexbor を導入してください。`find_package` を `QUIET` なしで呼ぶこの挙動は意図的なものです。
+利用側で `find_package(lexborpp CONFIG REQUIRED)` を実行したとき、package config
+は Lexbor をその場で解決します。`lexbor::lexbor_static`、
+`lexbor::lexbor` の config target と、header / library を直接探索する
+raw fallback に対応しています。どちらも見つからない場合や、指定した linkage
+で必要な library を見つけられない場合は configure で失敗します。
+
+インストール済み export は、外部 Lexbor target 名やビルドマシン固有の path
+ではなく、このライブラリ所有の安定した `lexborpp::lexbor` wrapper だけを参照
+します。package config が利用側の Lexbor を解決した後にこの wrapper へ配線する
+ため、`lexborpp::lexborpp` を同じ形で利用できます。
+
+raw fallback の選択規則は `LEXBORPP_RAW_LEXBOR_LINKAGE` で固定できます。
+未指定時の既定値は `AUTO` です。
+
+| 値 | 探索する raw library | 動作 |
+| --- | --- | --- |
+| `AUTO` | `lexbor_static`、なければ generic `lexbor` | `lexbor_static` は static、generic `lexbor` は shared 扱い |
+| `STATIC` | `lexbor_static`、なければ generic `lexbor` | どちらも static 扱いにして `LEXBOR_STATIC` を伝搬 |
+| `SHARED` | generic `lexbor` のみ | shared 扱い。`lexbor_static` だけでは失敗 |
+
+`AUTO` では basename だけでは判別できない generic `lexbor` を shared とみなします。
+static library だと分かっているのに名前が generic の場合は、明示的に
+`STATIC` を指定してください。同様に、許可される値は大文字の `AUTO` /
+`STATIC` / `SHARED` だけです。大小文字違いなどの不正値や、指定した linkage
+に対応する header / library が不足する組み合わせは configure を失敗させます。
+raw static では `LEXBOR_STATIC` が利用者へ伝搬されます。
+
+Windows の raw `SHARED` / generic `AUTO` では、`.dll.lib` と `.dll.a` を優先して
+探索します。これらの明示的な import-library 名を使わない plain `.lib` /
+`.a` は、対応する basename の DLL が library directory または
+隣接 / prefix の `bin` にある場合だけ shared と認定します。runtime が見つからない
+plain `.lib` / `.a` は「static 専用か shared import library か曖昧」として
+configure で失敗します。自動探索できない layout では
+`LEXBORPP_RAW_LEXBOR_RUNTIME_LIBRARY` に runtime shared library の path を
+指定できます。
+明示値は directory ではない既存の regular file で、platform の
+`CMAKE_SHARED_LIBRARY_SUFFIX`（Windows では大小文字を無視した `.dll`）で
+終わる必要があります。存在しない path、directory、`.lib` / `.a` は拒否されます。
+この検査は non-Windows の明示値にも適用されます（Windows 以外では platform
+suffix との一致も必要）。`STATIC` mode の `.lib` / `.a` は従来どおり static
+library として扱います。
 
 ## 使用例
 
@@ -131,7 +192,12 @@ auto main() -> int {
   }
 
   auto* root = lexborpp::get_root(doc_expected.value());
-  auto* featured = lexborpp::query_selector(root, "li.featured");
+  auto featured_result = lexborpp::query_selector(root, "li.featured");
+  if (!featured_result.has_value()) {
+    std::cerr << "invalid selector\n";
+    return EXIT_FAILURE;
+  }
+  auto* featured = featured_result.value();
   if (featured == nullptr) {
     std::cerr << "element not found\n";
     return EXIT_FAILURE;
@@ -145,7 +211,12 @@ auto main() -> int {
   std::cout << "text: " << lexborpp::get_deep_text(featured) << '\n';
   std::cout << "html: " << lexborpp::outer_html(featured) << '\n';
 
-  for (auto* node : lexborpp::query_selector_all(root, "li.item")) {
+  auto items_result = lexborpp::query_selector_all(root, "li.item");
+  if (!items_result.has_value()) {
+    std::cerr << "selector query failed\n";
+    return EXIT_FAILURE;
+  }
+  for (auto* node : items_result.value()) {
     if (auto const id = lexborpp::get_attr_value(node, "id"); id.has_value()) {
       std::cout << "id=" << *id << '\n';
     }
@@ -216,20 +287,36 @@ auto dump_ready_items(lxb_dom_node_t* root) -> void {
 | `get_elements_by_class(node, class_name)` | 開始ノードを含め、class トークンが一致する全要素を返す |
 | `get_following_element_by_op(node, op)` | 開始ノード自身と子孫を深さ優先で走査し、述語 `op` が最初に true を返したノードを返す（名前に反して "following 軸" ではない点に注意） |
 | `get_sibling_element_by_op(node, op)` | 指定ノード自身から後続兄弟を順に述語 `op` で判定し、最初に一致したノードを返す |
-| `query_selector(node, selector)` | CSS selector に一致する最初の要素を返す |
-| `query_selector_all(node, selector)` | CSS selector に一致する全要素を返す |
+| `query_selector(node, selector)` | CSS selector に一致する最初の要素を `std::expected<lxb_dom_node_t*, std::errc>` で返す |
+| `query_selector_all(node, selector)` | CSS selector に一致する全要素を `std::expected<std::vector<lxb_dom_node_t*>, std::errc>` で返す |
 | `query_selector<"...">(node)` | NTTP で渡した CSS selector に一致する最初の要素を返す |
 | `query_selector_all<"...">(node)` | NTTP で渡した CSS selector に一致する全要素を返す |
 | `document_id_index(root)` | 指定ルート配下の `id` 属性ノードをハッシュテーブルに保持する |
 | `index.find(id)` / `index.contains(id)` | インデックス経由で `id` からノードを `O(1)` 検索する |
+| `index.size()` | 重複を除いた `id` 値の数を返す |
+| `index.is_ambiguous(id)` | その `id` がスナップショット内で重複しているか判定する |
+| `index.covers_scope(scope)` | インデックスの root が `scope` 自身またはその祖先であるか判定する |
 | `query_selector(node, selector, index)` | 実行時 selector + インデックスでルート参照を改善した最初の要素を返す |
 | `query_selector_all(node, selector, index)` | 実行時 selector + インデックスでルート参照を改善した全要素を返す |
 | `query_selector<"...">(node, index)` | NTTP selector + インデックスでルート参照を改善した最初の要素を返す |
 | `query_selector_all<"...">(node, index)` | NTTP selector + インデックスでルート参照を改善した全要素を返す |
 
-> **インデックス利用の前提**: セレクタの右端 compound に `id` simple selector が含まれる場合のみインデックスを参照します。それ以外は通常の DOM ツリー走査にフォールバックします。
+> **インデックス利用の前提**: セレクタの右端 compound に `id` simple
+> selector が含まれる場合だけ単一ノードの fast path を使います。その `id`
+> が重複して `index.is_ambiguous(id)` となる場合、またはインデックスの root
+> が検索範囲全体を覆わず `index.covers_scope(node)` が false の場合は通常の
+> DOM ツリー走査へフォールバックします。runtime / NTTP ともに、indexed
+> query の first / all 結果は通常検索と一致します。
 >
-> **スナップショットであることに注意**: `document_id_index` は構築時点の `id` マップです。DOM を編集（id の変更・ノードの削除）した後は自動追従しません。編集後に検索する場合は `rebuild()` で作り直してください。また、文書内で `id` が重複している場合、最初に見つかったノードのみが登録されます。
+> **重複 ID の契約**: `document_id_index` は `id` ごとに最初に見つかった
+> ノードを登録します。重複があっても `find(id)` はその最初のノードを返し、
+> `size()` は出現回数ではなく一意な `id` 値の数です。重複情報は
+> `is_ambiguous(id)` で確認できます。
+>
+> **スナップショットであることに注意**: `document_id_index` は構築時点の
+> `id` マップと root を保持します。DOM を編集（id の変更・ノードの削除）した
+> 後は自動追従しません。編集後や別の root 範囲を使いたい場合は `rebuild()`
+> で作り直してください。
 
 ### 属性・テキスト・シリアライズ
 
@@ -250,10 +337,10 @@ auto dump_ready_items(lxb_dom_node_t* root) -> void {
 
 | API | 説明 |
 | --- | --- |
-| `as_element(node)` | `lxb_dom_node_t const*` を `lxb_dom_element_t*` に変換する |
+| `as_element(node)` | `lxb_dom_node_t*` を `lxb_dom_element_t*` に変換する。要素ノード以外 (テキスト・コメント・document など) は `nullptr` を返す |
 | `set_attr(element, name, value)` | 属性を追加 / 更新する |
 | `remove_attr(element, name)` | 属性を削除する |
-| `set_text_content(node, text)` | 既存の子ノードを消してテキストノードへ置き換える |
+| `set_text_content(node, text)` | 既存の子ノードを消してテキストノードへ置き換える。要素ノード以外は `false` を返す |
 
 ### Walker / range アダプタ
 
@@ -300,12 +387,18 @@ ctest --test-dir build -V
 - `get_first_element_by_class()` と `clazz<"...">` は `class` 属性文字列の完全一致です
 - `get_first_child_text()` / `get_all_children_text()` は直下のテキストノードだけを対象にします
 - `get_deep_text()` は子孫全体のテキストを対象にします
-- `query_selector()` は無効な selector や初期化失敗時に `nullptr` を返し、`query_selector_all()` は空配列を返します
-  - 実行時版 (`query_selector(node, selector)`) は**不正な selector も無音で「0 件ヒット」扱い**になります。NTTP 版のようなコンパイル時エラー検出はないため、selector 文字列の誤りに注意してください
+- 実行時版 (`query_selector(node, selector)`) は `std::expected` を返します。成功時に一致するノードがなければ `nullptr`、`query_selector_all()` では空配列を保持します。**不正な selector は `std::errc::invalid_argument` のエラー値**になります
+  - 例外有効ビルドで `query_selector_all()` のメモリ割り当てに失敗した場合は `std::errc::not_enough_memory` になります
+  - `-fno-exceptions` ビルドでは C++ の割り当て失敗を捕捉できないため、標準ライブラリの失敗経路（通常はabort）になります
+- `outer_html()` / `inner_html()` のメモリ割り当てに失敗すると、例外有効ビルドでは `std::bad_alloc` を送出します。部分的に生成されたHTMLを正常な戻り値として返しません
+- 実行時 selector の上限は **256 バイト**、compound / group / simple selector はそれぞれ **32 個**までです。超過は `std::errc::invalid_argument` になります
+- 実行時 selector の**末尾カンマ** (`"div,"` など) は NTTP 版と同じく不正入力です
+- `[attr^=""]` / `[attr$=""]` / `[attr*=""]` は CSS 仕様どおり**何にも一致しません**。`[attr=""]` は空の属性値に一致します
+- SVG の `<text>` のように Lexbor が動的にタグ ID を登録する要素も、`text` / `svg text` のような type selector で一致します
 - `query_selector()` / `query_selector_all()` と `query_selector<"...">()` / `query_selector_all<"...">()` は、いずれも**開始ノード自身を探索対象に含みます**（root 参加挙動を統一しています）
 - `query_selector<"...">()` / `query_selector_all<"...">()` はコンパイル時解析済みの selector を使います。未対応構文はコンパイルエラーになります
 - walker / range アダプタは Lexbor の生ポインタをそのまま返すため、元の `lxb_html_document_t` の寿命内でだけ使ってください
-- インデックス付き query (`query_selector(node, selector, index)` 等) は id の一意性を前提とします。文書内で id が重複している場合、インデックスには最初の 1 ノードのみ登録されるため、スコープ検索では素の走査と結果が異なることがあります
+- インデックス付き query (`query_selector(node, selector, index)` 等) は、`id` が重複している場合や index root が query scope を覆わない場合に通常走査へフォールバックします。このため、通常検索との first / all 結果は一致します
 
 ## 収録ファイル
 

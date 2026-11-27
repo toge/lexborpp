@@ -285,8 +285,13 @@ jobs:
       - name: Install wasmtime
         id: wasmtime
         run: |
-          WASMTIME_VERSION=$(curl -s https://api.github.com/repos/bytecodealliance/wasmtime/releases/latest | grep '"tag_name":' | sed -E 's/.*"v([^"]+)".*/\1/')
-          curl -sSL "https://github.com/bytecodealliance/wasmtime/releases/latest/download/wasmtime-v${WASMTIME_VERSION}-x86_64-linux.tar.xz" -o /tmp/wasmtime.tar.xz
+          # 未認証の api.github.com はレート制限され、空バージョンで 404 HTML を
+          # ダウンロードしてしまうため、ワークフロートークンで認証する。
+          WASMTIME_VERSION=$(curl -fsSL -H "Authorization: Bearer ${{ github.token }}" \
+            https://api.github.com/repos/bytecodealliance/wasmtime/releases/latest \
+            | grep '"tag_name":' | sed -E 's/.*"v([^"]+)".*/\1/')
+          test -n "${WASMTIME_VERSION}"
+          curl -fsSL "https://github.com/bytecodealliance/wasmtime/releases/download/v${WASMTIME_VERSION}/wasmtime-v${WASMTIME_VERSION}-x86_64-linux.tar.xz" -o /tmp/wasmtime.tar.xz
           tar -xf /tmp/wasmtime.tar.xz -C /tmp
           WASMTIME_DIR="/tmp/wasmtime-v${WASMTIME_VERSION}-x86_64-linux"
           echo "${WASMTIME_DIR}" >> $GITHUB_PATH
@@ -357,8 +362,13 @@ jobs:
       - name: Install wasmtime
         id: wasmtime
         run: |
-          WASMTIME_VERSION=$(curl -s https://api.github.com/repos/bytecodealliance/wasmtime/releases/latest | grep '"tag_name":' | sed -E 's/.*"v([^"]+)".*/\1/')
-          curl -sSL "https://github.com/bytecodealliance/wasmtime/releases/latest/download/wasmtime-v${WASMTIME_VERSION}-x86_64-linux.tar.xz" -o /tmp/wasmtime.tar.xz
+          # 未認証の api.github.com はレート制限され、空バージョンで 404 HTML を
+          # ダウンロードしてしまうため、ワークフロートークンで認証する。
+          WASMTIME_VERSION=$(curl -fsSL -H "Authorization: Bearer ${{ github.token }}" \
+            https://api.github.com/repos/bytecodealliance/wasmtime/releases/latest \
+            | grep '"tag_name":' | sed -E 's/.*"v([^"]+)".*/\1/')
+          test -n "${WASMTIME_VERSION}"
+          curl -fsSL "https://github.com/bytecodealliance/wasmtime/releases/download/v${WASMTIME_VERSION}/wasmtime-v${WASMTIME_VERSION}-x86_64-linux.tar.xz" -o /tmp/wasmtime.tar.xz
           tar -xf /tmp/wasmtime.tar.xz -C /tmp
           WASMTIME_DIR="/tmp/wasmtime-v${WASMTIME_VERSION}-x86_64-linux"
           echo "${WASMTIME_DIR}" >> $GITHUB_PATH
