@@ -34,6 +34,11 @@ if(FAKE_LEXBOR_KIND MATCHES "^SHARED")
       set_target_properties(${fake_target} PROPERTIES
         ARCHIVE_OUTPUT_NAME lexbor.dll)
     endif()
+    if(FAKE_LEXBOR_KIND STREQUAL "SHARED_PLAIN_GENERIC" AND
+        CMAKE_IMPORT_LIBRARY_SUFFIX STREQUAL ".dll.a")
+      set_target_properties(${fake_target} PROPERTIES
+        RUNTIME_OUTPUT_NAME liblexbor)
+    endif()
   endif()
 endif()
 

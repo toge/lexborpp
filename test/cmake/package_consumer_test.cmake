@@ -17,6 +17,13 @@ foreach(variable IN LISTS required_variables)
   endif()
 endforeach()
 
+if(LEXBORPP_SYSTEM_NAME STREQUAL "Windows" AND
+    NOT LEXBORPP_IMPORT_LIBRARY_SUFFIX)
+  message(FATAL_ERROR
+    "package_consumer_matrix requires "
+    "LEXBORPP_IMPORT_LIBRARY_SUFFIX on Windows")
+endif()
+
 set(work_dir "${LEXBORPP_BINARY_DIR}/package_consumer_matrix")
 file(REMOVE_RECURSE "${work_dir}")
 file(MAKE_DIRECTORY "${work_dir}")
@@ -303,6 +310,12 @@ set(fake_generic_combined_prefix "${work_dir}/fake-generic-combined")
 set(fake_static_only_prefix "${work_dir}/fake-static-only")
 set(fake_shared_only_prefix "${work_dir}/fake-shared-only")
 set(fake_shared_plain_prefix "${work_dir}/fake-shared-plain")
+set(fake_shared_plain_enabled FALSE)
+if(LEXBORPP_SYSTEM_NAME STREQUAL "Windows" AND
+    (LEXBORPP_IMPORT_LIBRARY_SUFFIX STREQUAL ".lib" OR
+     LEXBORPP_IMPORT_LIBRARY_SUFFIX STREQUAL ".dll.a"))
+  set(fake_shared_plain_enabled TRUE)
+endif()
 
 function(lexborpp_build_fake kind prefix label)
   set(binary "${work_dir}/build-${label}")
@@ -328,16 +341,31 @@ lexborpp_build_fake(
   STATIC_GENERIC "${fake_static_only_prefix}" "fake-static-only")
 lexborpp_build_fake(
   SHARED_GENERIC "${fake_shared_only_prefix}" "fake-shared-only")
-if(WIN32 AND
-    CMAKE_IMPORT_LIBRARY_SUFFIX STREQUAL ".lib")
+if(fake_shared_plain_enabled)
   lexborpp_build_fake(
     SHARED_PLAIN_GENERIC "${fake_shared_plain_prefix}"
     "fake-shared-plain")
+  if(LEXBORPP_IMPORT_LIBRARY_SUFFIX STREQUAL ".dll.a")
+    file(GLOB mingw_plain_import_libraries
+      "${fake_shared_plain_prefix}/lib/*lexbor.dll.a")
+    list(LENGTH mingw_plain_import_libraries
+      mingw_plain_import_libraries_count)
+    if(NOT mingw_plain_import_libraries_count EQUAL 1)
+      message(FATAL_ERROR
+        "expected one MinGW plain-import source library, found "
+        "${mingw_plain_import_libraries}")
+    endif()
+    list(GET mingw_plain_import_libraries 0
+      mingw_plain_import_library)
+    file(COPY_FILE "${mingw_plain_import_library}"
+      "${fake_shared_plain_prefix}/lib/liblexbor.a")
+    file(REMOVE "${mingw_plain_import_library}")
+  endif()
 endif()
 
 file(GLOB fake_generic_static_libraries
   "${fake_generic_combined_prefix}/lib/*lexbor${LEXBORPP_STATIC_LIBRARY_SUFFIX}")
-if(WIN32)
+if(LEXBORPP_SYSTEM_NAME STREQUAL "Windows")
   list(FILTER fake_generic_static_libraries
     EXCLUDE REGEX "\\.dll\\.(lib|a)$")
 endif()
@@ -350,7 +378,7 @@ if(NOT fake_generic_static_libraries_count EQUAL 1)
 endif()
 list(GET fake_generic_static_libraries 0 fake_generic_static_library)
 
-if(WIN32)
+if(LEXBORPP_SYSTEM_NAME STREQUAL "Windows")
   file(GLOB fake_generic_shared_runtime_libraries
     "${fake_generic_combined_prefix}/bin/*lexbor${LEXBORPP_SHARED_LIBRARY_SUFFIX}")
   if(LEXBORPP_IMPORT_LIBRARY_SUFFIX STREQUAL ".lib")
@@ -502,8 +530,7 @@ lexborpp_require_configure_failure(
   ${raw_shared_only_args}
   "-DLEXBORPP_RAW_LEXBOR_LINKAGE=STATIC")
 
-if(WIN32 AND
-    LEXBORPP_IMPORT_LIBRARY_SUFFIX STREQUAL ".lib")
+if(LEXBORPP_SYSTEM_NAME STREQUAL "Windows")
   set(static_only_shared_mismatch
     "ambiguous.*without matching runtime library")
 else()
@@ -518,7 +545,7 @@ lexborpp_require_configure_failure(
   ${raw_static_only_args}
   "-DLEXBORPP_RAW_LEXBOR_LINKAGE=SHARED")
 
-if(WIN32)
+if(fake_shared_plain_enabled)
   lexborpp_raw_consumer_args(
     "${fake_shared_plain_prefix}" raw_shared_plain_args)
   lexborpp_configure_build_test(
@@ -528,7 +555,7 @@ if(WIN32)
     "-DLEXBORPP_RAW_LEXBOR_LINKAGE=SHARED"
     "-DLEXBORPP_EXPECT_LINKAGE=SHARED"
     "-DLEXBORPP_FAKE_LEXBOR_RUNTIME_DIR=${raw_shared_plain_runtime_dir}"
-    "-DLEXBORPP_EXPECT_RESOLVED_LIBRARY_SUFFIX=${LEXBORPP_IMPORT_LIBRARY_SUFFIX}"
+    "-DLEXBORPP_EXPECT_RESOLVED_LIBRARY_SUFFIX=${LEXBORPP_STATIC_LIBRARY_SUFFIX}"
     "-DLEXBORPP_EXPECT_RESOLVED_RUNTIME_LIBRARY_SUFFIX=${LEXBORPP_SHARED_LIBRARY_SUFFIX}")
 endif()
 
