@@ -52,14 +52,22 @@ package config では `find_package(lexbor CONFIG QUIET)` を使い、target が
 package config が即終了する構成は使わない。どちらの経路でも解決できなければ
 `lexborpp_FOUND=FALSE` と理由を設定して return する。
 
-raw lookup は明示的な `lexbor_static` を先に探し、見つからない場合だけ
-generic な `lexbor` を探す。ライブラリ basename だけでは `lexbor.lib` のように
-static library と shared import library を判別できないため、raw linkage は
-`LEXBORPP_RAW_LEXBOR_LINKAGE=AUTO|STATIC|SHARED` の cache variable でも制御する。
-`AUTO` では `lexbor_static` が選ばれた場合だけ static と判定し、generic な
-`lexbor` は shared とみなす。generic な名前の static library を使う利用者は
-`STATIC` を明示する。header / library のみの top-level build と installed
-package consumer の双方で同じ規則を使う。
+raw lookup は
+`LEXBORPP_RAW_LEXBOR_LINKAGE=AUTO|STATIC|SHARED` で探索規則まで固定する。
+
+| 値 | 探索対象 | 選択時の linkage |
+| --- | --- | --- |
+| `AUTO` | `lexbor_static`、見つからなければ generic `lexbor` | 先頭なら static、generic なら shared |
+| `STATIC` | `lexbor_static`、見つからなければ generic `lexbor` | どちらも static |
+| `SHARED` | generic `lexbor` のみ | shared |
+
+`AUTO` 以外の値は大文字小文字も含めて構成エラーとする。`SHARED` で
+`lexbor_static` しか存在しない場合、または `STATIC` / `SHARED` 指定の探索で
+library が見つからない場合は、不完全な target を作らず失敗する。
+generic `lexbor.lib` / `liblexbor.a` は basename だけでは import library と
+static library を判別できないため、利用者が linkage を知っている場合は
+`STATIC` / `SHARED` を明示する。header / library のみの top-level build と
+installed package consumer の双方で同じ規則を使う。
 
 ### 4. raw 静的 Lexbor に `LEXBOR_STATIC` を伝搬する
 
@@ -96,9 +104,16 @@ triplet は環境変数または既定値 `x64-linux-static` を取り、CMake c
    - vcpkg の `lexbor::lexbor_static`
    - `lexbor::lexbor` のみを提供する Lexbor package config
    - package config なしの raw header + static library
-4. raw static consumer を実際にコンパイルし、ソース中の
-   `#ifndef LEXBOR_STATIC #error ... #endif` が通ることを確認する。Visual Studio
-   generator でも compile_commands.json の有無に依存しない。
+4. raw linkage matrix を実コンパイル / リンクで確認する。
+   - `AUTO + lexbor_static`: `LEXBOR_STATIC` が定義され、リンク成功
+   - `STATIC + generic lexbor`: `LEXBOR_STATIC` が定義され、リンク成功
+   - `SHARED + generic lexbor`: `LEXBOR_STATIC` が未定義で、リンク成功
+   - `SHARED + lexbor_static のみ`: configure 失敗
+   - 無効な linkage 値: configure 失敗
+   - MSVC shared consumer: `LXB_API` が import 用になる実ヘッダをコンパイルし、
+     `LEXBOR_STATIC` を要求する側のスモークでは失敗させない
+   Visual Studio generator でも compile_commands.json の有無に依存せず、
+   ソース中の `#ifdef LEXBOR_STATIC` / `#ifndef` assertion と実リンクで判定する。
 5. `./build.sh static` 後の `CMakeCache.txt` が
    `VCPKG_TARGET_TRIPLET=x64-linux-static` になり、呼び出し側の `VCPKG_ROOT`
    override が維持されることを確認する。
